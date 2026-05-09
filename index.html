@@ -72,14 +72,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR
 .client-body.open { display: block; }
 .body-divider { height: 1px; background: #f0f4f8; margin-bottom: 4px; }
 
-.insert-zone { display: flex; align-items: center; height: 22px; margin: 1px 0; opacity: 0.35; transition: opacity .15s; cursor: pointer; }
-.insert-zone:hover, .insert-zone:active { opacity: 1; }
-.ins-line { flex: 1; height: 1px; background: #a3bffa; }
-.ins-plus-btn { width: 20px; height: 20px; border-radius: 50%; background: #5a67d8; color: white; border: none; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; pointer-events: none; box-shadow: 0 1px 3px rgba(90,103,216,0.3); }
+.header-memo { flex: 1; min-width: 60px; max-width: 150px; padding: 4px 9px; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 11px; color: #718096; background: #f7fafc; outline: none; font-family: inherit; }
+.header-memo:focus { border-color: #5a67d8; background: white; }
+.header-memo::placeholder { color: #cbd5e0; }
 .insert-row { display: flex; align-items: center; gap: 6px; background: #f0f4ff; border-radius: 6px; margin: 3px 0; padding: 6px 8px; border: 1px solid #c3dafe; }
 .insert-row input { flex: 1; padding: 4px 8px; border: 1.5px solid #5a67d8; border-radius: 5px; font-size: 12px; font-family: inherit; outline: none; background: white; }
-/* 모바일에서 항상 잘 보이게 */
-@media (hover: none) { .insert-zone { opacity: 0.6; } }
+.ic.add-ic { color: #5a67d8; font-size: 15px; font-weight: 700; }
+.ic.add-ic:hover { background: #e8eeff; }
 
 .task-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; min-height: 30px; }
 .task-cb { width: 15px; height: 15px; cursor: pointer; accent-color: #5a67d8; flex-shrink: 0; }
@@ -92,10 +91,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR
 .ic.cn { color: #e53e3e; }
 .hint { font-size: 10px; color: #b0b8c8; text-align: center; padding: 2px 0 4px; background: #f8faff; border-radius: 4px; margin-bottom: 2px; }
 
-.memo-wrap { margin-top: 8px; }
-.memo-wrap label { display: block; font-size: 10px; color: #a0aec0; margin-bottom: 3px; font-weight: 500; }
-.memo-wrap textarea { width: 100%; padding: 7px 9px; border: 1.5px solid #e2e8f0; border-radius: 7px; font-size: 12px; resize: vertical; min-height: 46px; color: #4a5568; font-family: inherit; line-height: 1.5; }
-.memo-wrap textarea:focus { outline: none; border-color: #5a67d8; }
+.add-end-btn { display:flex; align-items:center; gap:5px; padding:6px 0; font-size:12px; color:#a0aec0; background:none; border:none; cursor:pointer; width:100%; }
+.add-end-btn:hover { color:#5a67d8; }
 .card-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
 .btn-del-cl { padding: 5px 11px; background: #fff5f5; color: #e53e3e; border: 1px solid #fed7d7; border-radius: 5px; font-size: 11px; cursor: pointer; }
 
@@ -329,6 +326,9 @@ function buildCard(cl){
     <div class="client-header" onclick="tog('${cl.id}')">
       <span style="font-size:15px">${icon}</span>
       <div class="client-name">${esc(cl.client_name)}</div>
+      <input class="header-memo" placeholder="메모..." value="${esc(cl.memo||'')}"
+        onclick="event.stopPropagation()"
+        onblur="saveMemo('${cl.id}',this.value)" />
       <div class="progress-info">
         <div class="progress-text">${d}/${tot}</div>
         <div class="progress-bar"><div class="progress-fill ${fillCls}" style="width:${pct}%"></div></div>
@@ -339,43 +339,49 @@ function buildCard(cl){
       <span class="chevron ${isOpen?'open':''}">▼</span>
     </div>
     <div class="client-body ${isOpen?'open':''}">
-      <div class="body-divider"></div>
-      <div class="hint">항목 사이 ── ＋ ── 를 클릭하면 중간에 추가</div>`;
+      <div class="body-divider"></div>`;
   tasks.forEach((task,i)=>{
-    const iIns=insertingAt&&insertingAt.cid===cl.id&&insertingAt.idx===i;
-    h+=iIns
-      ?`<div class="insert-row"><input id="ins-inp-${cl.id}-${i}" placeholder="새 항목 입력..."
-          onkeydown="if(event.key==='Enter')saveIns('${cl.id}',${i});if(event.key==='Escape')cancelIns()"/>
-          <button class="ic sv" onclick="saveIns('${cl.id}',${i})">✓</button>
-          <button class="ic cn" onclick="cancelIns()">✕</button></div>`
-      :`<div class="insert-zone" onclick="startIns('${cl.id}',${i})">
-          <div class="ins-line"></div><button class="ins-plus-btn">＋</button><div class="ins-line"></div></div>`;
     const isEd=editingTask&&editingTask.cid===cl.id&&editingTask.idx===i;
-    h+=isEd
-      ?`<div class="task-item">
-          <input type="checkbox" class="task-cb" ${task.done?'checked':''} disabled/>
-          <input class="task-edit-inp" id="ed-inp-${cl.id}-${i}" value="${task.text.replace(/"/g,'&quot;')}"
-            onkeydown="if(event.key==='Enter')saveEd('${cl.id}',${i});if(event.key==='Escape')cancelEd()"/>
-          <button class="ic sv" onclick="saveEd('${cl.id}',${i})">✓</button>
-          <button class="ic cn" onclick="cancelEd()">✕</button></div>`
-      :`<div class="task-item">
-          <input type="checkbox" class="task-cb" id="cb-${cl.id}-${i}" ${task.done?'checked':''}
-            onchange="chkDone('${cl.id}',${i},this.checked)"/>
-          <label class="task-lbl ${task.done?'done-lbl':''}" for="cb-${cl.id}-${i}">${task.text}</label>
-          <button class="ic" onclick="startEd('${cl.id}',${i})">✏️</button>
-          <button class="ic" onclick="delTask('${cl.id}',${i})">🗑</button></div>`;
+    const iIns=insertingAt&&insertingAt.cid===cl.id&&insertingAt.idx===i+1;
+    if(isEd){
+      h+=`<div class="task-item">
+        <input type="checkbox" class="task-cb" ${task.done?'checked':''} disabled/>
+        <input class="task-edit-inp" id="ed-inp-${cl.id}-${i}" value="${task.text.replace(/"/g,'&quot;')}"
+          onkeydown="if(event.key==='Enter')saveEd('${cl.id}',${i});if(event.key==='Escape')cancelEd()"/>
+        <button class="ic sv" onclick="saveEd('${cl.id}',${i})">✓</button>
+        <button class="ic cn" onclick="cancelEd()">✕</button></div>`;
+    } else {
+      h+=`<div class="task-item">
+        <input type="checkbox" class="task-cb" id="cb-${cl.id}-${i}" ${task.done?'checked':''}
+          onchange="chkDone('${cl.id}',${i},this.checked)"/>
+        <label class="task-lbl ${task.done?'done-lbl':''}" for="cb-${cl.id}-${i}">${task.text}</label>
+        <button class="ic" onclick="startEd('${cl.id}',${i})" title="수정">✏️</button>
+        <button class="ic del-ic" onclick="delTask('${cl.id}',${i})" title="삭제">🗑</button>
+        <button class="ic add-ic" onclick="event.stopPropagation();startIns('${cl.id}',${i+1})" title="아래에 추가">＋</button>
+      </div>`;
+    }
+    if(iIns){
+      h+=`<div class="insert-row">
+        <input id="ins-inp-${cl.id}-${i+1}" placeholder="새 항목 입력..."
+          onkeydown="if(event.key==='Enter')saveIns('${cl.id}',${i+1});if(event.key==='Escape')cancelIns()"/>
+        <button class="ic sv" onclick="saveIns('${cl.id}',${i+1})">✓</button>
+        <button class="ic cn" onclick="cancelIns()">✕</button></div>`;
+    }
   });
-  const iInsEnd=insertingAt&&insertingAt.cid===cl.id&&insertingAt.idx===tasks.length;
-  h+=iInsEnd
-    ?`<div class="insert-row"><input id="ins-inp-${cl.id}-${tasks.length}" placeholder="새 항목 입력..."
-        onkeydown="if(event.key==='Enter')saveIns('${cl.id}',${tasks.length});if(event.key==='Escape')cancelIns()"/>
-        <button class="ic sv" onclick="saveIns('${cl.id}',${tasks.length})">✓</button>
-        <button class="ic cn" onclick="cancelIns()">✕</button></div>`
-    :`<div class="insert-zone" onclick="startIns('${cl.id}',${tasks.length})">
-        <div class="ins-line"></div><button class="ins-plus-btn">＋</button><div class="ins-line"></div></div>`;
-  h+=`<div class="memo-wrap"><label>📝 메모</label>
-      <textarea placeholder="관련 메모를 입력하세요..." onblur="saveMemo('${cl.id}',this.value)">${esc(cl.memo||'')}</textarea></div>
-    <div class="card-actions"><button class="btn-del-cl" onclick="delClient('${cl.id}','${esc(cl.client_name)}')">🗑 삭제</button></div>
+  // 맨 앞에 추가 (첫 항목 위)
+  const iInsFirst=insertingAt&&insertingAt.cid===cl.id&&insertingAt.idx===0&&tasks.length>0;
+  // 맨 끝에 추가 버튼
+  const iInsEnd=insertingAt&&insertingAt.cid===cl.id&&insertingAt.idx===tasks.length&&(tasks.length===0||true);
+  if(tasks.length===0||iInsEnd){
+    h+=iInsEnd
+      ?`<div class="insert-row">
+          <input id="ins-inp-${cl.id}-${tasks.length}" placeholder="새 항목 입력..."
+            onkeydown="if(event.key==='Enter')saveIns('${cl.id}',${tasks.length});if(event.key==='Escape')cancelIns()"/>
+          <button class="ic sv" onclick="saveIns('${cl.id}',${tasks.length})">✓</button>
+          <button class="ic cn" onclick="cancelIns()">✕</button></div>`
+      :`<button class="add-end-btn" onclick="event.stopPropagation();startIns('${cl.id}',${tasks.length})">＋ 항목 추가</button>`;
+  }
+  h+=`<div class="card-actions"><button class="btn-del-cl" onclick="delClient('${cl.id}','${esc(cl.client_name)}')">🗑 삭제</button></div>
     </div></div>`;
   return h;
 }

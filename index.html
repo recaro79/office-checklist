@@ -314,6 +314,8 @@ function renderContent(){
 }
 
 function buildCard(cl){
+  // 구버전 데이터 형식 안전 처리
+  if(!Array.isArray(cl.tasks)) cl.tasks=migrateTasks(cl.tasks,cl.category);
   const tasks=cl.tasks||[];
   const d=tasks.filter(t=>t.done).length;
   const tot=tasks.length;
@@ -440,7 +442,7 @@ async function addClient(){
   if(!name){alert('이름을 입력해 주세요.');return;}
   closeModal();
   try{
-    const rec=await apiInsert({category:curModalCat,client_name:name,tasks:mkTasks(curModalCat),memo:'',completed:false});
+    const rec=await apiInsert({category:curModalCat,client_name:name,tasks:mkTasks(curModalCat),memo:''});
     clients.push(rec);openCards[rec.id]=true;renderAll();setSync('ok','저장됨');
   }catch(e){setSync('err','저장 실패');alert('저장 실패: '+e.message);}
 }

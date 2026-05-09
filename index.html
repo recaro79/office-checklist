@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>사무실 업무 체크리스트</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif; background: #f0f4f8; color: #1a202c; }
+
+/* ── Setup ── */
+#setup-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.setup-card { background: white; border-radius: 16px; padding: 40px; width: 100%; max-width: 480px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); }
+.setup-card h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #2d3748; }
+.setup-card p { font-size: 14px; color: #718096; margin-bottom: 28px; line-height: 1.6; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 6px; }
+.form-group input { width: 100%; padding: 12px 14px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 14px; transition: border-color 0.2s; }
+.form-group input:focus { outline: none; border-color: #5a67d8; }
+.btn-connect { width: 100%; padding: 14px; background: #5a67d8; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.btn-connect:hover { background: #4c51bf; }
+.setup-hint { margin-top: 14px; font-size: 12px; color: #a0aec0; text-align: center; }
+
+/* ── App ── */
+#main-app { display: none; min-height: 100vh; }
+
+/* Header */
+.header { background: white; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.header h1 { font-size: 17px; font-weight: 700; color: #2d3748; }
+.header .date { font-size: 11px; color: #a0aec0; margin-top: 2px; }
+.sync-area { display: flex; align-items: center; gap: 8px; }
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; }
+.sync-dot.ok { background: #48bb78; }
+.sync-dot.err { background: #fc8181; }
+.sync-dot.loading { background: #f6ad55; animation: blink 0.9s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.sync-txt { font-size: 11px; color: #718096; }
+.btn-reset { padding: 5px 11px; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; color: #718096; cursor: pointer; }
+.btn-reset:hover { background: #edf2f7; }
+
+/* Tabs */
+.tabs { display: flex; overflow-x: auto; background: white; border-bottom: 1px solid #e2e8f0; padding: 0 12px; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { padding: 11px 14px; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; border-bottom: 2px solid transparent; color: #718096; transition: all .2s; }
+.tab.active { color: #5a67d8; border-bottom-color: #5a67d8; font-weight: 700; }
+
+/* Content */
+.content { padding: 14px; max-width: 720px; margin: 0 auto; }
+
+/* Summary bar */
+.summary-bar { background: white; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; display: flex; gap: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.summary-item { text-align: center; flex: 1; }
+.summary-item .num { font-size: 22px; font-weight: 700; color: #5a67d8; }
+.summary-item .lbl { font-size: 11px; color: #a0aec0; margin-top: 2px; }
+.summary-item.done .num { color: #48bb78; }
+.summary-item.mid .num { color: #f6ad55; }
+
+/* Client Card */
+.client-card { background: white; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); overflow: hidden; }
+.client-header { padding: 13px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+.client-header:hover { background: #f7fafc; }
+.client-name { font-size: 14px; font-weight: 600; color: #2d3748; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress-info { text-align: right; }
+.progress-text { font-size: 11px; color: #a0aec0; margin-bottom: 3px; }
+.progress-bar { width: 80px; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: #5a67d8; border-radius: 3px; transition: width .3s; }
+.progress-fill.done-fill { background: #48bb78; }
+.chevron { font-size: 10px; color: #cbd5e0; transition: transform .2s; margin-left: 4px; }
+.chevron.open { transform: rotate(180deg); }
+
+.client-body { display: none; padding: 0 14px 14px; }
+.client-body.open { display: block; }
+.body-divider { height: 1px; background: #f0f4f8; margin-bottom: 10px; }
+
+/* Tasks */
+.task-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #f7fafc; }
+.task-item:last-of-type { border-bottom: none; }
+.task-cb { width: 17px; height: 17px; cursor: pointer; accent-color: #5a67d8; flex-shrink: 0; }
+.task-lbl { font-size: 13px; color: #4a5568; cursor: pointer; line-height: 1.4; }
+.task-lbl.done-lbl { text-decoration: line-through; color: #b2bec3; }
+
+/* Memo */
+.memo-wrap { margin-top: 10px; }
+.memo-wrap textarea { width: 100%; padding: 9px 11px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 13px; resize: vertical; min-height: 56px; color: #4a5568; font-family: inherit; line-height: 1.5; }
+.memo-wrap textarea:focus { outline: none; border-color: #5a67d8; }
+.memo-wrap label { display: block; font-size: 11px; color: #a0aec0; margin-bottom: 4px; font-weight: 500; }
+
+/* Client actions */
+.card-actions { display: flex; justify-content: flex-end; margin-top: 10px; gap: 8px; }
+.btn-del { padding: 6px 13px; background: #fff5f5; color: #e53e3e; border: 1px solid #fed7d7; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.btn-del:hover { background: #fed7d7; }
+
+/* Add button */
+.add-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 13px; background: white; border: 2px dashed #e2e8f0; border-radius: 12px; width: 100%; cursor: pointer; font-size: 13px; color: #a0aec0; transition: all .2s; }
+.add-btn:hover { border-color: #5a67d8; color: #5a67d8; background: #f0f4ff; }
+
+/* Modal */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 300; align-items: center; justify-content: center; padding: 20px; }
+.overlay.open { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 26px; width: 100%; max-width: 360px; }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; color: #2d3748; }
+.modal input { width: 100%; padding: 11px 13px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 14px; margin-bottom: 14px; font-family: inherit; }
+.modal input:focus { outline: none; border-color: #5a67d8; }
+.modal-btns { display: flex; gap: 8px; }
+.btn-cancel { flex: 1; padding: 11px; border: 1.5px solid #e2e8f0; border-radius: 8px; background: white; cursor: pointer; font-size: 14px; }
+.btn-ok { flex: 2; padding: 11px; background: #5a67d8; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn-ok:hover { background: #4c51bf; }
+
+/* Empty state */
+.empty { text-align: center; padding: 40px 20px; color: #a0aec0; font-size: 14px; }
+.empty .icon { font-size: 36px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ── Setup Screen ── -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <h1>🏢 사무실 업무 체크리스트</h1>
+    <p>Supabase 연동 정보를 입력해 주세요.<br>한 번 입력하면 이 기기에서는 자동 저장됩니다.</p>
+    <div class="form-group">
+      <label>Project URL</label>
+      <input type="url" id="sb-url" placeholder="https://xxxxx.supabase.co" />
+    </div>
+    <div class="form-group">
+      <label>Anon Key (Legacy eyJ...)</label>
+      <input type="text" id="sb-key" placeholder="eyJhbGci..." />
+    </div>
+    <button class="btn-connect" onclick="connectSupabase()">연결 완료 →</button>
+    <p class="setup-hint">소득세 체크리스트와 동일한 URL · Key를 입력하시면 됩니다.</p>
+  </div>
+</div>
+
+<!-- ── Main App ── -->
+<div id="main-app">
+  <div class="header">
+    <div>
+      <h1>🏢 업무 체크리스트</h1>
+      <div class="date" id="today-date"></div>
+    </div>
+    <div class="sync-area">
+      <div class="sync-dot ok" id="sync-dot"></div>
+      <span class="sync-txt" id="sync-txt">연결됨</span>
+      <button class="btn-reset" onclick="resetConn()">재설정</button>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="content">
+    <div class="summary-bar" id="summary-bar"></div>
+    <div id="content"></div>
+  </div>
+</div>
+
+<!-- ── Modal ── -->
+<div class="overlay" id="modal" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <h3 id="modal-title">의뢰인 추가</h3>
+    <input type="text" id="modal-input" placeholder="의뢰인 이름 또는 사건명" />
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">취소</button>
+      <button class="btn-ok" onclick="addClient()">추가</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════
+// 업무 카테고리 및 체크리스트 항목 정의
+// ════════════════════════════════════════
+const CATS = {
+  '양도소득세': [
+    '의뢰인 기본정보 수집',
+    '취득·양도 계약서 수집',
+    '취득가액 증빙 확인',
+    '필요경비 증빙 수집 (중개수수료·법무사비 등)',
+    '비과세·감면 요건 검토',
+    '장기보유특별공제 적용 확인',
+    '세액 계산 및 검토',
+    '신고서 작성',
+    '신고서 제출',
+    '납부세액 안내'
+  ],
+  '증여세': [
+    '증여자·수증자 기본정보 수집',
+    '증여재산 종류 확인',
+    '증여재산 평가 (시가·보충평가)',
+    '10년 합산과세 검토',
+    '증여공제 적용 확인 (배우자·직계존비속 등)',
+    '세액 계산 및 검토',
+    '신고서 작성 및 제출',
+    '납부세액 안내'
+  ],
+  '상속세': [
+    '피상속인·상속인 기본정보 수집',
+    '상속재산 목록 작성 (부동산·금융·기타)',
+    '부채·공과금 확인',
+    '사전증여재산 합산 검토',
+    '금융재산 조회',
+    '상속공제 적용 검토 (기초·배우자·일괄 등)',
+    '세액 계산 및 검토',
+    '신고서 작성 및 제출',
+    '납부세액 안내'
+  ],
+  '세무조사': [
+    '조사 안내문 수령·확인',
+    '조사 세목·기간 확인',
+    '의뢰인 사전 미팅 및 현황 파악',
+    '장부·증빙 정리',
+    '소명자료 준비',
+    '조사관 응대',
+    '조사 결과 검토',
+    '불복 절차 검토 (이의신청·심사청구)'
+  ],
+  '기타': [
+    '우편물·공문 처리',
+    '수임 계약서 작성',
+    '세금계산서 발행',
+    '수수료 청구·수령 확인',
+    '업무일지 작성',
+    '기타 행정처리'
+  ]
+};
+
+const CAT_KEYS = Object.keys(CATS);
+let activeTab = CAT_KEYS[0];
+let clients = [];
+let curModalCat = '';
+let SB_URL = '', SB_KEY = '';
+
+// ════════════════════════════════════════
+// 초기화
+// ════════════════════════════════════════
+window.onload = function () {
+  SB_URL = localStorage.getItem('oc_sb_url') || '';
+  SB_KEY = localStorage.getItem('oc_sb_key') || '';
+  if (SB_URL) document.getElementById('sb-url').value = SB_URL;
+  if (SB_KEY) document.getElementById('sb-key').value = SB_KEY;
+  if (SB_URL && SB_KEY) showApp();
+  const d = new Date();
+  const dateEl = document.getElementById('today-date');
+  if (dateEl) dateEl.textContent = d.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+};
+
+function connectSupabase() {
+  const url = document.getElementById('sb-url').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) { alert('URL과 Key를 모두 입력해 주세요.'); return; }
+  SB_URL = url; SB_KEY = key;
+  localStorage.setItem('oc_sb_url', url);
+  localStorage.setItem('oc_sb_key', key);
+  showApp();
+}
+
+function showApp() {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
+  renderTabs();
+  loadData();
+}
+
+function resetConn() {
+  if (!confirm('연동 설정을 초기화하시겠습니까?')) return;
+  localStorage.removeItem('oc_sb_url');
+  localStorage.removeItem('oc_sb_key');
+  location.reload();
+}
+
+// ════════════════════════════════════════
+// Supabase API
+// ════════════════════════════════════════
+function setSync(state, txt) {
+  document.getElementById('sync-dot').className = `sync-dot ${state}`;
+  document.getElementById('sync-txt').textContent = txt;
+}
+
+async function apiGet() {
+  setSync('loading', '불러오는 중...');
+  try {
+    const r = await fetch(
+      `${SB_URL}/rest/v1/office_checklist?select=*&order=created_at.asc`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } }
+    );
+    if (!r.ok) throw new Error(r.status);
+    setSync('ok', '동기화 완료');
+    return await r.json();
+  } catch(e) {
+    setSync('err', '불러오기 실패');
+    return null;
+  }
+}
+
+async function apiInsert(rec) {
+  const r = await fetch(`${SB_URL}/rest/v1/office_checklist`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify(rec)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return (await r.json())[0];
+}
+
+async function apiPatch(id, fields) {
+  await fetch(`${SB_URL}/rest/v1/office_checklist?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields)
+  });
+}
+
+async function apiDel(id) {
+  await fetch(`${SB_URL}/rest/v1/office_checklist?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
+  });
+}
+
+// ════════════════════════════════════════
+// 데이터 로드
+// ════════════════════════════════════════
+async function loadData() {
+  const data = await apiGet();
+  if (data) { clients = data; renderAll(); }
+}
+
+// ════════════════════════════════════════
+// 렌더링
+// ════════════════════════════════════════
+function renderTabs() {
+  document.getElementById('tabs').innerHTML = CAT_KEYS.map(cat =>
+    `<div class="tab ${cat === activeTab ? 'active' : ''}" onclick="switchTab('${cat}')">${cat}</div>`
+  ).join('');
+}
+
+function switchTab(cat) {
+  activeTab = cat;
+  renderTabs();
+  renderAll();
+}
+
+function renderAll() {
+  renderSummary();
+  renderContent();
+}
+
+function renderSummary() {
+  const catClients = clients.filter(c => c.category === activeTab);
+  const total = catClients.length;
+  const done = catClients.filter(c => {
+    const tasks = CATS[c.category];
+    const t = c.tasks || {};
+    return tasks.every((_, i) => t[i]);
+  }).length;
+  const inProgress = total - done;
+  document.getElementById('summary-bar').innerHTML = `
+    <div class="summary-item"><div class="num">${total}</div><div class="lbl">전체</div></div>
+    <div class="summary-item mid"><div class="num">${inProgress}</div><div class="lbl">진행중</div></div>
+    <div class="summary-item done"><div class="num">${done}</div><div class="lbl">완료</div></div>
+  `;
+}
+
+function renderContent() {
+  const catClients = clients.filter(c => c.category === activeTab);
+  const tasks = CATS[activeTab];
+  let html = '';
+
+  if (catClients.length === 0) {
+    html += `<div class="empty"><div class="icon">📋</div><div>등록된 의뢰인이 없습니다.</div></div>`;
+  }
+
+  catClients.forEach(cl => {
+    const tm = cl.tasks || {};
+    const done = tasks.filter((_, i) => tm[i]).length;
+    const pct = tasks.length ? Math.round(done / tasks.length * 100) : 0;
+    const allDone = done === tasks.length;
+
+    html += `
+    <div class="client-card" id="card-${cl.id}">
+      <div class="client-header" onclick="toggleCard('${cl.id}')">
+        <span style="font-size:16px;">${allDone ? '✅' : '📂'}</span>
+        <div class="client-name">${esc(cl.client_name)}</div>
+        <div class="progress-info">
+          <div class="progress-text">${done} / ${tasks.length}</div>
+          <div class="progress-bar"><div class="progress-fill ${allDone ? 'done-fill' : ''}" style="width:${pct}%"></div></div>
+        </div>
+        <span class="chevron" id="chev-${cl.id}">▼</span>
+      </div>
+      <div class="client-body" id="body-${cl.id}">
+        <div class="body-divider"></div>
+        ${tasks.map((task, i) => `
+          <div class="task-item">
+            <input class="task-cb" type="checkbox" id="t-${cl.id}-${i}" ${tm[i] ? 'checked' : ''}
+              onchange="toggleTask('${cl.id}', ${i}, this.checked)" />
+            <label class="task-lbl ${tm[i] ? 'done-lbl' : ''}" for="t-${cl.id}-${i}">${task}</label>
+          </div>
+        `).join('')}
+        <div class="memo-wrap">
+          <label>📝 메모</label>
+          <textarea placeholder="관련 메모를 입력하세요..." onblur="saveMemo('${cl.id}', this.value)">${esc(cl.memo || '')}</textarea>
+        </div>
+        <div class="card-actions">
+          <button class="btn-del" onclick="deleteClient('${cl.id}', '${esc(cl.client_name)}')">🗑 삭제</button>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  html += `<button class="add-btn" onclick="openModal('${activeTab}')">＋ 의뢰인 추가</button>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+function toggleCard(id) {
+  document.getElementById(`body-${id}`).classList.toggle('open');
+  document.getElementById(`chev-${id}`).classList.toggle('open');
+}
+
+async function toggleTask(id, idx, checked) {
+  const cl = clients.find(c => c.id === id);
+  if (!cl) return;
+  cl.tasks = cl.tasks || {};
+  cl.tasks[idx] = checked;
+  const lbl = document.querySelector(`label[for="t-${id}-${idx}"]`);
+  if (lbl) lbl.className = `task-lbl ${checked ? 'done-lbl' : ''}`;
+  const tasks = CATS[cl.category];
+  const done = tasks.filter((_, i) => cl.tasks[i]).length;
+  const pct = Math.round(done / tasks.length * 100);
+  const allDone = done === tasks.length;
+  const card = document.getElementById(`card-${id}`);
+  if (card) {
+    card.querySelector('.progress-fill').style.width = pct + '%';
+    card.querySelector('.progress-fill').className = `progress-fill ${allDone ? 'done-fill' : ''}`;
+    card.querySelector('.progress-text').textContent = `${done} / ${tasks.length}`;
+    card.querySelector('.client-header span').textContent = allDone ? '✅' : '📂';
+  }
+  renderSummary();
+  await apiPatch(id, { tasks: cl.tasks });
+  setSync('ok', '저장됨');
+}
+
+async function saveMemo(id, val) {
+  const cl = clients.find(c => c.id === id);
+  if (!cl) return;
+  cl.memo = val;
+  await apiPatch(id, { memo: val });
+  setSync('ok', '저장됨');
+}
+
+// ════════════════════════════════════════
+// Modal
+// ════════════════════════════════════════
+function openModal(cat) {
+  curModalCat = cat;
+  document.getElementById('modal-title').textContent = `${cat} 의뢰인 추가`;
+  document.getElementById('modal-input').value = '';
+  document.getElementById('modal').classList.add('open');
+  setTimeout(() => document.getElementById('modal-input').focus(), 80);
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+function handleOverlayClick(e) { if (e.target === document.getElementById('modal')) closeModal(); }
+
+document.getElementById('modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') addClient(); });
+
+async function addClient() {
+  const name = document.getElementById('modal-input').value.trim();
+  if (!name) { alert('이름을 입력해 주세요.'); return; }
+  closeModal();
+  try {
+    const rec = await apiInsert({ category: curModalCat, client_name: name, tasks: {}, memo: '' });
+    clients.push(rec);
+    renderAll();
+    setSync('ok', '저장됨');
+    setTimeout(() => {
+      document.getElementById(`body-${rec.id}`)?.classList.add('open');
+      document.getElementById(`chev-${rec.id}`)?.classList.add('open');
+    }, 60);
+  } catch(e) {
+    setSync('err', '저장 실패');
+    alert('저장 실패: ' + e.message);
+  }
+}
+
+async function deleteClient(id, name) {
+  if (!confirm(`'${name}' 의뢰인을 삭제하시겠습니까?`)) return;
+  await apiDel(id);
+  clients = clients.filter(c => c.id !== id);
+  renderAll();
+  setSync('ok', '삭제됨');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>

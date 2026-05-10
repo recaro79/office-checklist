@@ -140,6 +140,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR
 .calc-close { background:none; border:none; font-size:26px; cursor:pointer; color:#a0aec0; line-height:1; padding:2px 6px; border-radius:6px; }
 .calc-close:hover { color:#e53e3e; background:#fff5f5; }
 .calc-frame { flex:1; border:none; width:100%; height:100%; }
+
+/* ── 모의계산 탭·모달 ── */
+.tab.calc-tab { color:#5a67d8; font-weight:700; }
+.tab.calc-tab:hover { background:#f0f4ff; }
+.calc-overlay { display:none; position:fixed; inset:0; z-index:500; flex-direction:column; background:white; }
+.calc-overlay.open { display:flex; }
+.calc-top { padding:11px 16px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+.calc-top-title { font-size:15px; font-weight:700; color:#2d3748; }
+.calc-close { background:none; border:none; font-size:26px; cursor:pointer; color:#a0aec0; padding:2px 6px; border-radius:6px; line-height:1; }
+.calc-close:hover { color:#e53e3e; background:#fff5f5; }
+.calc-frame { flex:1; border:none; width:100%; }
 </style>
 </head>
 <body>
@@ -301,7 +312,7 @@ function renderAll(){renderTabs();renderSummary();renderContent();}
 function renderTabs(){
   document.getElementById('tabs').innerHTML=CAT_KEYS.map(cat=>
     `<div class="tab ${cat===activeTab?'active':''}" onclick="sw('${cat}')">${cat}</div>`).join('')
-    + '<div class="tab calc-tab" onclick="openCalc()">🧮 모의계산</div>';
+    +'<div class="tab calc-tab" onclick="openCalc()">🧮 모의계산</div>';
 }
 function sw(cat){activeTab=cat;editingTask=null;insertingAt=null;renderAll();}
 
@@ -534,365 +545,32 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 </script>
 
 
-<!-- ── 모의계산기 모달 ── -->
+<!-- 세금 모의 계산기 -->
 <div class="calc-overlay" id="calc-overlay">
   <div class="calc-top">
     <span class="calc-top-title">🧮 세금 모의 계산기</span>
     <button class="calc-close" onclick="closeCalc()">✕</button>
   </div>
-  <iframe class="calc-frame" id="calc-frame" sandbox="allow-scripts allow-same-origin"></iframe>
+  <iframe class="calc-frame" id="calc-frame"></iframe>
 </div>
-
 <script>
-const CALC_HTML = `<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>세금 모의 계산기</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#fff;--bg2:#f5f5f4;--bg3:#e8e8e7;
-  --tx:#1a1a1a;--tx2:#666;--tx3:#aaa;
-  --bd:rgba(0,0,0,0.13);--bd2:rgba(0,0,0,0.22);
-  --blue:#1a5fa8;--blue-bg:#e6f0fb;--red:#c0392b;
-  --r:8px;--rsm:6px
+const _CB64='PCFET0NUWVBFIGh0bWw+CjxodG1sIGxhbmc9ImtvIj4KPGhlYWQ+CjxtZXRhIGNoYXJzZXQ9IlVURi04Ij4KPG1ldGEgbmFtZT0idmlld3BvcnQiIGNvbnRlbnQ9IndpZHRoPWRldmljZS13aWR0aCwgaW5pdGlhbC1zY2FsZT0xLjAiPgo8dGl0bGU+7IS46riIIOuqqOydmCDqs4TsgrDquLA8L3RpdGxlPgo8c3R5bGU+Cip7Ym94LXNpemluZzpib3JkZXItYm94O21hcmdpbjowO3BhZGRpbmc6MH0KOnJvb3R7CiAgLS1iZzojZmZmOy0tYmcyOiNmNWY1ZjQ7LS1iZzM6I2U4ZThlNzsKICAtLXR4OiMxYTFhMWE7LS10eDI6IzY2NjstLXR4MzojYWFhOwogIC0tYmQ6cmdiYSgwLDAsMCwwLjEzKTstLWJkMjpyZ2JhKDAsMCwwLDAuMjIpOwogIC0tYmx1ZTojMWE1ZmE4Oy0tYmx1ZS1iZzojZTZmMGZiOy0tcmVkOiNjMDM5MmI7CiAgLS1yOjhweDstLXJzbTo2cHgKfQpAbWVkaWEocHJlZmVycy1jb2xvci1zY2hlbWU6ZGFyayl7OnJvb3R7CiAgLS1iZzojMWUxZTFlOy0tYmcyOiMyODI4Mjg7LS1iZzM6IzMzMzsKICAtLXR4OiNlNGU0ZTQ7LS10eDI6Izk5OTstLXR4MzojNjY2OwogIC0tYmQ6cmdiYSgyNTUsMjU1LDI1NSwwLjEyKTstLWJkMjpyZ2JhKDI1NSwyNTUsMjU1LDAuMjIpOwogIC0tYmx1ZTojNmFhY2Y1Oy0tYmx1ZS1iZzojMTYyODQwOy0tcmVkOiNmODcxNzEKfX0KYm9keXtmb250LWZhbWlseTotYXBwbGUtc3lzdGVtLEJsaW5rTWFjU3lzdGVtRm9udCwnQXBwbGUgU0QgR290aGljIE5lbycsJ05vdG8gU2FucyBLUicsJ1NlZ29lIFVJJyxzYW5zLXNlcmlmO2JhY2tncm91bmQ6dmFyKC0tYmcpO2NvbG9yOnZhcigtLXR4KTttaW4taGVpZ2h0OjEwMHZofQoud3JhcHttYXgtd2lkdGg6NjYwcHg7bWFyZ2luOjAgYXV0bztwYWRkaW5nOjIwcHggMTZweCA2MHB4fQpoMXtmb250LXNpemU6MjBweDtmb250LXdlaWdodDo3MDA7bWFyZ2luLWJvdHRvbTozcHh9Ci5zdWJ7Zm9udC1zaXplOjEycHg7Y29sb3I6dmFyKC0tdHgyKTttYXJnaW4tYm90dG9tOjE4cHh9Ci5tdGFic3tkaXNwbGF5OmZsZXg7Ym9yZGVyLWJvdHRvbToxcHggc29saWQgdmFyKC0tYmQpO21hcmdpbi1ib3R0b206MThweH0KLm10e3BhZGRpbmc6MTBweCAxNnB4O2ZvbnQtc2l6ZToxNHB4O2ZvbnQtd2VpZ2h0OjUwMDtib3JkZXI6bm9uZTtiYWNrZ3JvdW5kOm5vbmU7Y3Vyc29yOnBvaW50ZXI7Y29sb3I6dmFyKC0tdHgyKTtib3JkZXItYm90dG9tOjJweCBzb2xpZCB0cmFuc3BhcmVudDttYXJnaW4tYm90dG9tOi0xcHg7ZGlzcGxheTpmbGV4O2FsaWduLWl0ZW1zOmNlbnRlcjtnYXA6NXB4O2ZvbnQtZmFtaWx5OmluaGVyaXR9Ci5tdC5vbntjb2xvcjp2YXIoLS10eCk7Ym9yZGVyLWJvdHRvbS1jb2xvcjp2YXIoLS10eCl9Ci5zdGFic3tkaXNwbGF5OmZsZXg7Ym9yZGVyLWJvdHRvbToxcHggc29saWQgdmFyKC0tYmQpO21hcmdpbi1ib3R0b206MTRweDtvdmVyZmxvdy14OmF1dG87c2Nyb2xsYmFyLXdpZHRoOm5vbmV9Ci5zdGFiczo6LXdlYmtpdC1zY3JvbGxiYXJ7ZGlzcGxheTpub25lfQouc3R7cGFkZGluZzo4cHggMTNweDtmb250LXNpemU6MTNweDtmb250LXdlaWdodDo1MDA7Ym9yZGVyOm5vbmU7YmFja2dyb3VuZDpub25lO2N1cnNvcjpwb2ludGVyO2NvbG9yOnZhcigtLXR4Mik7Ym9yZGVyLWJvdHRvbToycHggc29saWQgdHJhbnNwYXJlbnQ7bWFyZ2luLWJvdHRvbTotMXB4O3doaXRlLXNwYWNlOm5vd3JhcDtmb250LWZhbWlseTppbmhlcml0fQouc3Qub257Y29sb3I6dmFyKC0tdHgpO2JvcmRlci1ib3R0b20tY29sb3I6dmFyKC0tdHgpfQoucG5se2Rpc3BsYXk6bm9uZX0ucG5sLm9ue2Rpc3BsYXk6YmxvY2t9Ci5uYm94e2Rpc3BsYXk6ZmxleDthbGlnbi1pdGVtczpjZW50ZXI7Z2FwOjhweDtwYWRkaW5nOjlweCAxM3B4O2JhY2tncm91bmQ6dmFyKC0tYmcyKTtib3JkZXI6MXB4IHNvbGlkIHZhcigtLWJkKTtib3JkZXItcmFkaXVzOnZhcigtLXJzbSk7bWFyZ2luLWJvdHRvbToxNHB4fQoubmJveCBsYWJlbHtmb250LXNpemU6MTJweDtjb2xvcjp2YXIoLS10eDIpO3doaXRlLXNwYWNlOm5vd3JhcH0KLm5ib3ggaW5wdXR7ZmxleDoxO2JvcmRlcjpub25lO2JhY2tncm91bmQ6dHJhbnNwYXJlbnQ7Zm9udC1zaXplOjE0cHg7Y29sb3I6dmFyKC0tdHgpO291dGxpbmU6bm9uZTttaW4td2lkdGg6MDtmb250LWZhbWlseTppbmhlcml0fQoubmJveCBpbnB1dDo6cGxhY2Vob2xkZXJ7Y29sb3I6dmFyKC0tdHgzKX0KLnNse2ZvbnQtc2l6ZToxMXB4O2ZvbnQtd2VpZ2h0OjcwMDtsZXR0ZXItc3BhY2luZzouMDdlbTtjb2xvcjp2YXIoLS10eDIpO3RleHQtdHJhbnNmb3JtOnVwcGVyY2FzZTttYXJnaW46MTJweCAwIDhweDtwYWRkaW5nLWJvdHRvbTo1cHg7Ym9yZGVyLWJvdHRvbToxcHggc29saWQgdmFyKC0tYmQpfQoucjJ7ZGlzcGxheTpncmlkO2dyaWQtdGVtcGxhdGUtY29sdW1uczoxZnIgMWZyO2dhcDoxMHB4O21hcmdpbi1ib3R0b206MTBweH0KLmZke2Rpc3BsYXk6ZmxleDtmbGV4LWRpcmVjdGlvbjpjb2x1bW47Z2FwOjRweH0KLmZkIGxhYmVse2ZvbnQtc2l6ZToxMnB4O2NvbG9yOnZhcigtLXR4Mil9Ci5mZCBpbnB1dCwuZmQgc2VsZWN0e2ZvbnQtc2l6ZToxNHB4O3BhZGRpbmc6OHB4IDEwcHg7Ym9yZGVyOjFweCBzb2xpZCB2YXIoLS1iZCk7Ym9yZGVyLXJhZGl1czp2YXIoLS1yc20pO2JhY2tncm91bmQ6dmFyKC0tYmcpO2NvbG9yOnZhcigtLXR4KTt3aWR0aDoxMDAlO291dGxpbmU6bm9uZTt0cmFuc2l0aW9uOmJvcmRlci1jb2xvciAuMTVzOy13ZWJraXQtYXBwZWFyYW5jZTpub25lO2FwcGVhcmFuY2U6bm9uZTtmb250LWZhbWlseTppbmhlcml0fQouZmQgc2VsZWN0e2JhY2tncm91bmQtaW1hZ2U6dXJsKCJkYXRhOmltYWdlL3N2Zyt4bWwsJTNDc3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgd2lkdGg9JzEyJyBoZWlnaHQ9JzcnIHZpZXdCb3g9JzAgMCAxMiA3JyUzRSUzQ3BhdGggZD0nTTEgMWw1IDUgNS01JyBzdHJva2U9JyUyMzg4OCcgc3Ryb2tlLXdpZHRoPScxLjUnIGZpbGw9J25vbmUnIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcgc3Ryb2tlLWxpbmVqb2luPSdyb3VuZCcvJTNFJTNDL3N2ZyUzRSIpO2JhY2tncm91bmQtcmVwZWF0Om5vLXJlcGVhdDtiYWNrZ3JvdW5kLXBvc2l0aW9uOnJpZ2h0IDEwcHggY2VudGVyO3BhZGRpbmctcmlnaHQ6MjhweH0KLmZkIGlucHV0OmZvY3VzLC5mZCBzZWxlY3Q6Zm9jdXN7Ym9yZGVyLWNvbG9yOnZhcigtLWJsdWUpfQouY2J0bnt3aWR0aDoxMDAlO21hcmdpbi10b3A6MTJweDtwYWRkaW5nOjExcHg7Zm9udC1zaXplOjE0cHg7Zm9udC13ZWlnaHQ6NjAwO2N1cnNvcjpwb2ludGVyO2JvcmRlcjoxcHggc29saWQgdmFyKC0tYmQyKTtib3JkZXItcmFkaXVzOnZhcigtLXJzbSk7YmFja2dyb3VuZDp2YXIoLS1iZyk7Y29sb3I6dmFyKC0tdHgpO2ZvbnQtZmFtaWx5OmluaGVyaXQ7dHJhbnNpdGlvbjpiYWNrZ3JvdW5kIC4xMnN9Ci5jYnRuOmhvdmVye2JhY2tncm91bmQ6dmFyKC0tYmczKX0uY2J0bjphY3RpdmV7dHJhbnNmb3JtOnNjYWxlKC45OSl9Ci5yYnh7YmFja2dyb3VuZDp2YXIoLS1iZzIpO2JvcmRlcjoxcHggc29saWQgdmFyKC0tYmQpO2JvcmRlci1yYWRpdXM6dmFyKC0tcik7cGFkZGluZzoxM3B4IDE1cHg7bWFyZ2luLXRvcDoxMnB4fQoucmhlYWR7Zm9udC1zaXplOjExcHg7Y29sb3I6dmFyKC0tdHgyKTttYXJnaW4tYm90dG9tOjhweDtwYWRkaW5nLWJvdHRvbTo3cHg7Ym9yZGVyLWJvdHRvbToxcHggc29saWQgdmFyKC0tYmQpfQoucnJ7ZGlzcGxheTpmbGV4O2p1c3RpZnktY29udGVudDpzcGFjZS1iZXR3ZWVuO2FsaWduLWl0ZW1zOmNlbnRlcjtwYWRkaW5nOjVweCAwO2JvcmRlci1ib3R0b206MXB4IHNvbGlkIHZhcigtLWJkKTtmb250LXNpemU6MTNweH0KLnJyOmxhc3QtY2hpbGR7Ym9yZGVyLWJvdHRvbTpub25lO3BhZGRpbmctdG9wOjhweH0KLnJyLnRvdCAucmx7Zm9udC13ZWlnaHQ6NjAwO2ZvbnQtc2l6ZToxNHB4fQoucnIudG90IC5ydntmb250LXdlaWdodDo3MDA7Zm9udC1zaXplOjE2cHg7Y29sb3I6dmFyKC0tYmx1ZSl9Ci5yciAucmx7Y29sb3I6dmFyKC0tdHgyKX0ucnIgLnJ2e2NvbG9yOnZhcigtLXR4KX0KLm5vdGV7Zm9udC1zaXplOjExcHg7Y29sb3I6dmFyKC0tdHgzKTttYXJnaW4tdG9wOjlweDtsaW5lLWhlaWdodDoxLjZ9Ci5odG9we2Rpc3BsYXk6ZmxleDthbGlnbi1pdGVtczpjZW50ZXI7anVzdGlmeS1jb250ZW50OnNwYWNlLWJldHdlZW47bWFyZ2luLWJvdHRvbToxMnB4fQouaGNudGxibHtmb250LXNpemU6MTNweDtjb2xvcjp2YXIoLS10eDIpfQouY2xyYnRue2ZvbnQtc2l6ZToxMnB4O2NvbG9yOnZhcigtLXJlZCk7Ym9yZGVyOm5vbmU7YmFja2dyb3VuZDpub25lO2N1cnNvcjpwb2ludGVyO3BhZGRpbmc6NHB4IDhweDtmb250LWZhbWlseTppbmhlcml0fQouaGVtcHt0ZXh0LWFsaWduOmNlbnRlcjtwYWRkaW5nOjQwcHggMDtjb2xvcjp2YXIoLS10eDMpO2ZvbnQtc2l6ZToxM3B4fQouaGl7Ym9yZGVyOjFweCBzb2xpZCB2YXIoLS1iZCk7Ym9yZGVyLXJhZGl1czp2YXIoLS1yKTtwYWRkaW5nOjEzcHggMTVweDttYXJnaW4tYm90dG9tOjEwcHg7YmFja2dyb3VuZDp2YXIoLS1iZyl9Ci5oaHtkaXNwbGF5OmZsZXg7anVzdGlmeS1jb250ZW50OnNwYWNlLWJldHdlZW47YWxpZ24taXRlbXM6ZmxleC1zdGFydDttYXJnaW4tYm90dG9tOjhweH0KLmh0YWd7Zm9udC1zaXplOjExcHg7cGFkZGluZzoycHggOXB4O2JvcmRlci1yYWRpdXM6MjBweDtiYWNrZ3JvdW5kOnZhcigtLWJsdWUtYmcpO2NvbG9yOnZhcigtLWJsdWUpO2ZvbnQtd2VpZ2h0OjYwMDtkaXNwbGF5OmlubGluZS1ibG9jazttYXJnaW4tYm90dG9tOjRweH0KLmhuYW1le2ZvbnQtc2l6ZToxNXB4O2ZvbnQtd2VpZ2h0OjYwMH0KLmhtZXRhe2ZvbnQtc2l6ZToxMXB4O2NvbG9yOnZhcigtLXR4Myk7dGV4dC1hbGlnbjpyaWdodDttYXJnaW4tdG9wOjNweH0KLmhkZWx7Ym9yZGVyOm5vbmU7YmFja2dyb3VuZDpub25lO2N1cnNvcjpwb2ludGVyO2NvbG9yOnZhcigtLXR4Myk7Zm9udC1zaXplOjIwcHg7cGFkZGluZzowIDRweDtsaW5lLWhlaWdodDoxO2ZvbnQtZmFtaWx5OmluaGVyaXR9Ci5oZGVsOmhvdmVye2NvbG9yOnZhcigtLXJlZCl9Ci5ocm93c3tkaXNwbGF5OmdyaWQ7Z3JpZC10ZW1wbGF0ZS1jb2x1bW5zOjFmciAxZnI7Z2FwOjJweCAxMnB4O21hcmdpbi10b3A6NnB4fQouaHJvd3tmb250LXNpemU6MTJweDtkaXNwbGF5OmZsZXg7anVzdGlmeS1jb250ZW50OnNwYWNlLWJldHdlZW47Z2FwOjhweDtwYWRkaW5nOjNweCAwO2JvcmRlci1ib3R0b206MXB4IHNvbGlkIHZhcigtLWJkKX0KLmhyb3cgLmhse2NvbG9yOnZhcigtLXR4Mil9Lmhyb3cgLmh2e2NvbG9yOnZhcigtLXR4KTt0ZXh0LWFsaWduOnJpZ2h0fQpAbWVkaWEobWF4LXdpZHRoOjQ4MHB4KXsucjJ7Z3JpZC10ZW1wbGF0ZS1jb2x1bW5zOjFmcn0uaHJvd3N7Z3JpZC10ZW1wbGF0ZS1jb2x1bW5zOjFmcn19Cjwvc3R5bGU+CjwvaGVhZD4KPGJvZHk+CjxkaXYgY2xhc3M9IndyYXAiPgogIDxoMT7shLjquIgg66qo7J2YIOqzhOyCsOq4sDwvaDE+CiAgPHAgY2xhc3M9InN1YiI+7KKF7ZWp7IaM65Od7IS4IMK3IOyWkeuPhOyGjOuTneyEuCDCtyDspp3sl6zshLggwrcg7IOB7IaN7IS4ICZuYnNwO3wmbmJzcDsgMjAyNOuFhCDqt4Dsho0g6riw7KSAICZuYnNwO3wmbmJzcDsg66qo7J2Y6rOE7IKwIOyghOyaqSDssLjqs6DsnpDro4w8L3A+CgogIDxkaXYgY2xhc3M9Im10YWJzIj4KICAgIDxidXR0b24gY2xhc3M9Im10IG9uIiBvbmNsaWNrPSJzbSgnYycpIj4KICAgICAgPHN2ZyB3aWR0aD0iMTUiIGhlaWdodD0iMTUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSI0IiB5PSIyIiB3aWR0aD0iMTYiIGhlaWdodD0iMjAiIHJ4PSIyIi8+PGxpbmUgeDE9IjgiIHkxPSI2IiB4Mj0iMTYiIHkyPSI2Ii8+PGxpbmUgeDE9IjgiIHkxPSIxMCIgeDI9IjE2IiB5Mj0iMTAiLz48bGluZSB4MT0iOCIgeTE9IjE0IiB4Mj0iMTIiIHkyPSIxNCIvPjwvc3ZnPgogICAgICDrqqjsnZjqs4TsgrAKICAgIDwvYnV0dG9uPgogICAgPGJ1dHRvbiBjbGFzcz0ibXQiIG9uY2xpY2s9InNtKCdoJykiPgogICAgICA8c3ZnIHdpZHRoPSIxNSIgaGVpZ2h0PSIxNSIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjkiLz48cG9seWxpbmUgcG9pbnRzPSIxMiA3IDEyIDEyIDE1IDE1Ii8+PC9zdmc+CiAgICAgIOqzhOyCsCDsnbTroKUKICAgIDwvYnV0dG9uPgogIDwvZGl2PgoKICA8ZGl2IGlkPSJtYyI+CiAgICA8ZGl2IGNsYXNzPSJuYm94Ij4KICAgICAgPHN2ZyB3aWR0aD0iMTQiIGhlaWdodD0iMTQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAgMjF2LTJhNCA0IDAgMCAwLTQtNEg4YTQgNCAwIDAgMC00IDR2MiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iNyIgcj0iNCIvPjwvc3ZnPgogICAgICA8bGFiZWw+7ISx66qFIC8g7IOB7Zi4PC9sYWJlbD4KICAgICAgPGlucHV0IHR5cGU9InRleHQiIGlkPSJ0bmFtZSIgcGxhY2Vob2xkZXI9Iu2Zjeq4uOuPmSAg65iQ64qUICAo7KO8Ke2VnOq1reyEuOustCIgbWF4bGVuZ3RoPSI0MCI+CiAgICA8L2Rpdj4KICAgIDxkaXYgY2xhc3M9InN0YWJzIj4KICAgICAgPGJ1dHRvbiBjbGFzcz0ic3Qgb24iIG9uY2xpY2s9InNzKCdpbicpIj7sooXtlanshozrk53shLg8L2J1dHRvbj4KICAgICAgPGJ1dHRvbiBjbGFzcz0ic3QiIG9uY2xpY2s9InNzKCd0cicpIj7slpHrj4Tshozrk53shLg8L2J1dHRvbj4KICAgICAgPGJ1dHRvbiBjbGFzcz0ic3QiIG9uY2xpY2s9InNzKCdnaScpIj7spp3sl6zshLg8L2J1dHRvbj4KICAgICAgPGJ1dHRvbiBjbGFzcz0ic3QiIG9uY2xpY2s9InNzKCdpaCcpIj7sg4Hsho3shLg8L2J1dHRvbj4KICAgIDwvZGl2PgoKICAgIDwhLS0g7KKF7ZWp7IaM65Od7IS4IC0tPgogICAgPGRpdiBpZD0icC1pbiIgY2xhc3M9InBubCBvbiI+CiAgICAgIDxkaXYgY2xhc3M9InNsIj7shozrk50g7J6F66ClPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InIyIj4KICAgICAgICA8ZGl2IGNsYXNzPSJmZCI+PGxhYmVsPuyImOyeheq4iOyVoSAo7JuQKTwvbGFiZWw+PGlucHV0IHR5cGU9InRleHQiIGlkPSJpciIgcGxhY2Vob2xkZXI9IjEwMCwwMDAsMDAwIiBjbGFzcz0ibmkiPjwvZGl2PgogICAgICAgIDxkaXYgY2xhc3M9ImZkIj48bGFiZWw+7ZWE7JqU6rK967mEICjsm5ApPC9sYWJlbD48aW5wdXQgdHlwZT0idGV4dCIgaWQ9ImllIiBwbGFjZWhvbGRlcj0iMzAsMDAwLDAwMCIgY2xhc3M9Im5pIj48L2Rpdj4KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InIyIj4KICAgICAgICA8ZGl2IGNsYXNzPSJmZCI+PGxhYmVsPuq4sOuzuOqzteygnCDsnbjsm5DsiJggKOuzuOyduCDtj6ztlagpPC9sYWJlbD48aW5wdXQgdHlwZT0ibnVtYmVyIiBpZD0iaXAiIHZhbHVlPSIxIiBtaW49IjEiIG1heD0iMTAiPjwvZGl2PgogICAgICAgIDxkaXYgY2xhc3M9ImZkIj48bGFiZWw+6riw7YOAIOyGjOuTneqzteygnCAo7JuQKTwvbGFiZWw+PGlucHV0IHR5cGU9InRleHQiIGlkPSJpZGMiIHBsYWNlaG9sZGVyPSIwIiBjbGFzcz0ibmkiPjwvZGl2PgogICAgICA8L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0icjIiPgogICAgICAgIDxkaXYgY2xhc3M9ImZkIj48bGFiZWw+7IS47JWh6rO17KCcICjsm5ApPC9sYWJlbD48aW5wdXQgdHlwZT0idGV4dCIgaWQ9Iml0YyIgcGxhY2Vob2xkZXI9IjAiIGNsYXNzPSJuaSI+PC9kaXY+CiAgICAgICAgPGRpdiBjbGFzcz0iZmQiPjxsYWJlbD7quLDrgqnrtoDshLjslaEgKOybkCk8L2xhYmVsPjxpbnB1dCB0eXBlPSJ0ZXh0IiBpZD0iaXByIiBwbGFjZWhvbGRlcj0iMCIgY2xhc3M9Im5pIj48L2Rpdj4KICAgICAgPC9kaXY+CiAgICAgIDxidXR0b24gY2xhc3M9ImNidG4iIG9uY2xpY2s9ImNJbigpIj7qs4TsgrDtlZjquLA8L2J1dHRvbj4KICAgICAgPGRpdiBpZD0icmkiPjwvZGl2PgogICAgICA8cCBjbGFzcz0ibm90ZSI+4oC7IOyngOuwqeyGjOuTneyEuCjshozrk53shLjsnZggMTAlKSDrs4Trj4Qgwrcg6riw67O46rO17KCcIDHsnbjri7kgMTUw66eM7JuQIMK3IDIwMjTrhYQg6reA7IaNIOq4sOykgDwvcD4KICAgIDwvZGl2PgoKICAgIDwhLS0g7JaR64+E7IaM65Od7IS4IC0tPgogICAgPGRpdiBpZD0icC10ciIgY2xhc3M9InBubCI+CiAgICAgIDxkaXYgY2xhc3M9InNsIj7slpHrj4Qg7KCV67O0PC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InIyIj4KICAgICAgICA8ZGl2IGNsYXNzPSJmZCI+PGxhYmVsPuyWkeuPhOqwgOyVoSAo7JuQKTwvbGFiZWw+PGlucHV0IHR5cGU9InRleHQiIGlkPSJ0cyIgcGxhY2Vob2xkZXI9IjUwMCwwMDAsMDAwIiBjbGFzcz0ibmkiPjwvZGl2PgogICAgICAgIDxkaXYgY2xhc3M9ImZkIj48bGFiZWw+7Leo65Od6rCA7JWhICjsm5ApPC9sYWJlbD48aW5wdXQgdHlwZT0idGV4dCIgaWQ9InRiIiBwbGFjZWhvbGRlcj0iMzAwLDAwMCwwMDAiIGNsYXNzPSJuaSI+PC9kaXY+CiAgICAgIDwvZGl2PgogICAgICA8ZGl2IGNsYXNzPSJyMiI+CiAgICAgICAgPGRpdiBjbGFzcz0iZmQiPjxsYWJlbD7tlYTsmpTqsr3ruYQgKOybkCk8L2xhYmVsPjxpbnB1dCB0eXBlPSJ0ZXh0IiBpZD0idGUiIHBsYWNlaG9sZGVyPSIxMCwwMDAsMDAwIiBjbGFzcz0ibmkiPjwvZGl2PgogICAgICAgIDxkaXYgY2xhc3M9ImZkIj48bGFiZWw+67O07Jyg6riw6rCEICjrhYQpPC9sYWJlbD48aW5wdXQgdHlwZT0ibnVtYmVyIiBpZD0idHkiIHBsYWNlaG9sZGVyPSI1IiBtaW49IjAiIHN0ZXA9IjEiPjwvZGl2PgogICAgICA8L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0icjIiPgogICAgICAgIDxkaXYgY2xhc3M9ImZkIj48bGFiZWw+7J6Q7IKwIOq1rOu2hDwvbGFiZWw+CiAgICAgICAgICA8c2VsZWN0IGlkPSJ0dCI+CiAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9ImciPuydvOuwmCDrtoDrj5nsgrA8L29wdGlvbj4KICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT0iczEiPuuLqOq4sOyWkeuPhCAoMeuFhCDrr7jrp4wpPC9vcHRpb24+CiAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9InMyIj7ri6jquLDslpHrj4QgKDF+MuuFhCk8L29wdGlvbj4KICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT0ibGQiPuu5hOyCrOyXheyaqSDthqDsp4A8L29wdGlvbj4KICAgICAgICAgIDwvc2VsZWN0PgogICAgICAgIDwvZGl2PgogICAgICAgIDxkaXYgY2xhc3M9ImZkIj48bGFiZWw+MeyEuOuMgCAx7KO87YOdIOyXrOu2gDwvbGFiZWw+CiAgICAgICAgICA8c2VsZWN0IGlkPSJ0b2giPgogICAgICAgICAgICA8b3B0aW9uIHZhbHVlPSJuIj7tlbTri7kg7JeG7J2MPC9vcHRpb24+CiAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9InkiPu2VtOuLuSAoMuuFhCDsnbTsg4Eg67O07JygKTwvb3B0aW9uPgogICAgICAgICAgPC9zZWxlY3Q+CiAgICAgICAgPC9kaXY+CiAgICAgIDwvZGl2PgogICAgICA8YnV0dG9uIGNsYXNzPSJjYnRuIiBvbmNsaWNrPSJjVHIoKSI+6rOE7IKw7ZWY6riwPC9idXR0b24+CiAgICAgIDxkaXYgaWQ9InJ0Ij48L2Rpdj4KICAgICAgPHAgY2xhc3M9Im5vdGUiPuKAuyDquLDrs7jqs7XsoJwgMjUw66eM7JuQL+uFhCDCtyDsp4DrsKnshozrk53shLgg67OE64+EIMK3IOu5hOqzvOyEuCDsmpTqsbQg7IOB7IS4IOy2qeyhsSDsl6zrtoDripQg67OE64+EIOqygO2GoCDtlYTsmpQ8L3A+CiAgICA8L2Rpdj4KCiAgICA8IS0tIOymneyXrOyEuCAtLT4KICAgIDxkaXYgaWQ9InAtZ2kiIGNsYXNzPSJwbmwiPgogICAgICA8ZGl2IGNsYXNzPSJzbCI+7Kad7JesIOygleuztDwvZGl2PgogICAgICA8ZGl2IGNsYXNzPSJyMiI+CiAgICAgICAgPGRpdiBjbGFzcz0iZmQiPjxsYWJlbD7spp3sl6zsnqzsgrDqsIDslaEgKOybkCk8L2xhYmVsPjxpbnB1dCB0eXBlPSJ0ZXh0IiBpZD0iZ2EiIHBsYWNlaG9sZGVyPSIyMDAsMDAwLDAwMCIgY2xhc3M9Im5pIj48L2Rpdj4KICAgICAgICA8ZGl2IGNsYXNzPSJmZCI+PGxhYmVsPuyImOymneyekOyZgOydmCDqtIDqs4Q8L2xhYmVsPgogICAgICAgICAgPHNlbGVjdCBpZD0iZ3IiPgogICAgICAgICAgICA8b3B0aW9uIHZhbHVlPSJzcCI+67Cw7Jqw7J6QICg27Ja1IOqzteygnCk8L29wdGlvbj4KICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT0iY2giPuyngeqzhOu5hOyGjSDigJQg7ISx64WEIOyekOuFgCAoNSwwMDDrp4zsm5ApPC9vcHRpb24+CiAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9ImNtIj7sp4Hqs4TruYTsho0g4oCUIOuvuOyEseuFhCDsnpDrhYAgKDIsMDAw66eM7JuQKTwvb3B0aW9uPgogICAgICAgICAgICA8b3B0aW9uIHZhbHVlPSJwYSI+7KeB6rOE7KG07IaNIOKAlCDrtoDrqqggKDUsMDAw66eM7JuQKTwvb3B0aW9uPgogICAgICAgICAgICA8b3B0aW9uIHZhbHVlPSJvdCI+6riw7YOAIOy5nOyhsSAoMSwwMDDrp4zsm5ApPC9vcHRpb24+CiAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9InN0Ij7tg4DsnbggKOqzteygnCDsl4bsnYwpPC9vcHRpb24+CiAgICAgICAgICA8L3NlbGVjdD4KICAgICAgICA8L2Rpdj4KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InIyIj4KICAgICAgICA8ZGl2IGNsYXNzPSJmZCI+PGxhYmVsPjEw64WEIOuCtCDsgqzsoIQg7Kad7JesIO2VqeyCsOyVoSAo7JuQKTwvbGFiZWw+PGlucHV0IHR5cGU9InRleHQiIGlkPSJncCIgcGxhY2Vob2xkZXI9IjAiIGNsYXNzPSJuaSI+PC9kaXY+CiAgICAgICAgPGRpdiBjbGFzcz0iZmQiPjxsYWJlbD7si6Dqs6DshLjslaHqs7XsoJwg7KCB7JqpPC9sYWJlbD4KICAgICAgICAgIDxzZWxlY3QgaWQ9ImdycCI+PG9wdGlvbiB2YWx1ZT0ieSI+7KCB7JqpICgzJSk8L29wdGlvbj48b3B0aW9uIHZhbHVlPSJuIj7rr7jsoIHsmqk8L29wdGlvbj48L3NlbGVjdD4KICAgICAgICA8L2Rpdj4KICAgICAgPC9kaXY+CiAgICAgIDxidXR0b24gY2xhc3M9ImNidG4iIG9uY2xpY2s9ImNHaSgpIj7qs4TsgrDtlZjquLA8L2J1dHRvbj4KICAgICAgPGRpdiBpZD0icmciPjwvZGl2PgogICAgICA8cCBjbGFzcz0ibm90ZSI+4oC7IOymneyXrOyerOyCsOqzteygnOuKlCAxMOuFhCDtlansgrAg7ZWc64+EIOyggeyaqSDCtyDqs7XsnbXrspXsnbgg7Lac7JewIOuTsSDtirnroYAg67OE64+EPC9wPgogICAgPC9kaXY+CgogICAgPCEtLSDsg4Hsho3shLggLS0+CiAgICA8ZGl2IGlkPSJwLWloIiBjbGFzcz0icG5sIj4KICAgICAgPGRpdiBjbGFzcz0ic2wiPuyDgeyGjSDsoJXrs7Q8L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0icjIiPgogICAgICAgIDxkaXYgY2xhc3M9ImZkIj48bGFiZWw+7LSdIOyDgeyGjeyerOyCsOqwgOyVoSAo7JuQKTwvbGFiZWw+PGlucHV0IHR5cGU9InRleHQiIGlkPSJodCIgcGxhY2Vob2xkZXI9IjEsMDAwLDAwMCwwMDAiIGNsYXNzPSJuaSI+PC9kaXY+CiAgICAgICAgPGRpdiBjbGFzcz0iZmQiPjxsYWJlbD7ssYTrrLTCt+yepeuhgOu5hMK36rO16rO86riIICjsm5ApPC9sYWJlbD48aW5wdXQgdHlwZT0idGV4dCIgaWQ9ImhkIiBwbGFjZWhvbGRlcj0iMCIgY2xhc3M9Im5pIj48L2Rpdj4KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InIyIj4KICAgICAgICA8ZGl2IGNsYXNzPSJmZCI+PGxhYmVsPuuwsOyasOyekCDsg4Hsho0g7Jes67aAPC9sYWJlbD4KICAgICAgICAgIDxzZWxlY3QgaWQ9ImhzcCI+PG9wdGlvbiB2YWx1ZT0ieSI+7J6I7J2MPC9vcHRpb24+PG9wdGlvbiB2YWx1ZT0ibiI+7JeG7J2MPC9vcHRpb24+PC9zZWxlY3Q+CiAgICAgICAgPC9kaXY+CiAgICAgICAgPGRpdiBjbGFzcz0iZmQiPjxsYWJlbD7rsLDsmrDsnpAg7Iuk7KCcIOyDgeyGjeyVoSAo7JuQKTwvbGFiZWw+PGlucHV0IHR5cGU9InRleHQiIGlkPSJoc2EiIHBsYWNlaG9sZGVyPSI1MDAsMDAwLDAwMCIgY2xhc3M9Im5pIj48L2Rpdj4KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InIyIj4KICAgICAgICA8ZGl2IGNsYXNzPSJmZCI+PGxhYmVsPuq4iOycteyerOyCsCAo7JuQKTwvbGFiZWw+PGlucHV0IHR5cGU9InRleHQiIGlkPSJoZiIgcGxhY2Vob2xkZXI9IjAiIGNsYXNzPSJuaSI+PC9kaXY+CiAgICAgICAgPGRpdiBjbGFzcz0iZmQiPjxsYWJlbD7si6Dqs6DshLjslaHqs7XsoJwg7KCB7JqpPC9sYWJlbD4KICAgICAgICAgIDxzZWxlY3QgaWQ9ImhycCI+PG9wdGlvbiB2YWx1ZT0ieSI+7KCB7JqpICgzJSk8L29wdGlvbj48b3B0aW9uIHZhbHVlPSJuIj7rr7jsoIHsmqk8L29wdGlvbj48L3NlbGVjdD4KICAgICAgICA8L2Rpdj4KICAgICAgPC9kaXY+CiAgICAgIDxidXR0b24gY2xhc3M9ImNidG4iIG9uY2xpY2s9ImNJaCgpIj7qs4TsgrDtlZjquLA8L2J1dHRvbj4KICAgICAgPGRpdiBpZD0icmgiPjwvZGl2PgogICAgICA8cCBjbGFzcz0ibm90ZSI+4oC7IOydvOq0hOqzteygnCg17Ja1KSB2cyDquLDstIjqs7XsoJwr67Cw7Jqw7J6Q6rO17KCcIOykkSDsnKDrpqztlZwg67Cp67KVIOyekOuPmSDshKDtg508L3A+CiAgICA8L2Rpdj4KICA8L2Rpdj4KCiAgPCEtLSDsnbTroKUg7YOtIC0tPgogIDxkaXYgaWQ9Im1oIiBzdHlsZT0iZGlzcGxheTpub25lIj4KICAgIDxkaXYgY2xhc3M9Imh0b3AiPgogICAgICA8c3BhbiBjbGFzcz0iaGNudGxibCIgaWQ9ImhjbnQiPjwvc3Bhbj4KICAgICAgPGJ1dHRvbiBjbGFzcz0iY2xyYnRuIiBvbmNsaWNrPSJjbHJBbGwoKSI+7KCE7LK0IOyCreygnDwvYnV0dG9uPgogICAgPC9kaXY+CiAgICA8ZGl2IGlkPSJobCI+PC9kaXY+CiAgPC9kaXY+CjwvZGl2PgoKPHNjcmlwdD4KY29uc3QgU0s9J3RheC1jYWxjLXYxJzsKY29uc3QgVEw9e2luOifsooXtlanshozrk53shLgnLHRyOifslpHrj4Tshozrk53shLgnLGdpOifspp3sl6zshLgnLGloOifsg4Hsho3shLgnfTsKbGV0IGhpc3Q9W107CgpmdW5jdGlvbiBsb2FkSCgpe3RyeXtjb25zdCBzPWxvY2FsU3RvcmFnZS5nZXRJdGVtKFNLKTtpZihzKWhpc3Q9SlNPTi5wYXJzZShzKTt9Y2F0Y2goZSl7aGlzdD1bXTt9fQpmdW5jdGlvbiBzYXZlSCgpe3RyeXtsb2NhbFN0b3JhZ2Uuc2V0SXRlbShTSyxKU09OLnN0cmluZ2lmeShoaXN0KSk7fWNhdGNoKGUpe319Cgpkb2N1bWVudC5hZGRFdmVudExpc3RlbmVyKCdpbnB1dCcsZnVuY3Rpb24oZSl7CiAgaWYoIWUudGFyZ2V0LmNsYXNzTGlzdC5jb250YWlucygnbmknKSlyZXR1cm47CiAgY29uc3QgZWw9ZS50YXJnZXQscG9zPWVsLnNlbGVjdGlvblN0YXJ0LHByZXY9ZWwudmFsdWUubGVuZ3RoOwogIGNvbnN0IHJhdz1lbC52YWx1ZS5yZXBsYWNlKC9bXjAtOV0vZywnJyk7CiAgaWYoIXJhdyl7ZWwudmFsdWU9Jyc7cmV0dXJuO30KICBlbC52YWx1ZT1OdW1iZXIocmF3KS50b0xvY2FsZVN0cmluZygna28tS1InKTsKICB0cnl7Y29uc3QgZD1lbC52YWx1ZS5sZW5ndGgtcHJldjtlbC5zZXRTZWxlY3Rpb25SYW5nZShwb3MrZCxwb3MrZCk7fWNhdGNoKHgpe30KfSk7CgpmdW5jdGlvbiBudihpZCl7cmV0dXJuIHBhcnNlRmxvYXQoKGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKGlkKS52YWx1ZXx8JycpLnJlcGxhY2UoLywvZywnJykpfHwwO30KZnVuY3Rpb24gZm0obil7cmV0dXJuIE1hdGgucm91bmQobikudG9Mb2NhbGVTdHJpbmcoJ2tvLUtSJykrJ+ybkCc7fQpmdW5jdGlvbiBmcChuKXtyZXR1cm4oTWF0aC5yb3VuZChuKjEwKS8xMCkrJyUnO30KZnVuY3Rpb24gZXNjKHMpe3JldHVybiBzLnJlcGxhY2UoLyYvZywnJmFtcDsnKS5yZXBsYWNlKC88L2csJyZsdDsnKS5yZXBsYWNlKC8+L2csJyZndDsnKTt9CgpmdW5jdGlvbiBzbSh0KXsKICBkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCcubXQnKS5mb3JFYWNoKChlbCxpKT0+ZWwuY2xhc3NMaXN0LnRvZ2dsZSgnb24nLFsnYycsJ2gnXVtpXT09PXQpKTsKICBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnbWMnKS5zdHlsZS5kaXNwbGF5PXQ9PT0nYyc/J2Jsb2NrJzonbm9uZSc7CiAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ21oJykuc3R5bGUuZGlzcGxheT10PT09J2gnPydibG9jayc6J25vbmUnOwogIGlmKHQ9PT0naCcpcmVuZGVySCgpOwp9CmZ1bmN0aW9uIHNzKGlkKXsKICBkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCcuc3QnKS5mb3JFYWNoKChlbCxpKT0+ZWwuY2xhc3NMaXN0LnRvZ2dsZSgnb24nLFsnaW4nLCd0cicsJ2dpJywnaWgnXVtpXT09PWlkKSk7CiAgZG9jdW1lbnQucXVlcnlTZWxlY3RvckFsbCgnLnBubCcpLmZvckVhY2gocD0+cC5jbGFzc0xpc3QudG9nZ2xlKCdvbicscC5pZD09PSdwLScraWQpKTsKfQoKZnVuY3Rpb24gc2hvd1IocmlkLHJvd3MsdHlwZSl7CiAgbGV0IGg9JzxkaXYgY2xhc3M9InJieCI+PGRpdiBjbGFzcz0icmhlYWQiPuqzhOyCsCDqsrDqs7w8L2Rpdj4nOwogIHJvd3MuZm9yRWFjaCgocixpKT0+ewogICAgaCs9YDxkaXYgY2xhc3M9InJyJHtpPT09cm93cy5sZW5ndGgtMT8nIHRvdCc6Jyd9Ij48c3BhbiBjbGFzcz0icmwiPiR7clswXX08L3NwYW4+PHNwYW4gY2xhc3M9InJ2Ij4ke3JbMV19PC9zcGFuPjwvZGl2PmA7CiAgfSk7CiAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQocmlkKS5pbm5lckhUTUw9aCsnPC9kaXY+JzsKICBhZGRIKHR5cGUscm93cyk7Cn0KCmZ1bmN0aW9uIGFkZEgodHlwZSxyb3dzKXsKICBjb25zdCBuYW1lPWRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCd0bmFtZScpLnZhbHVlLnRyaW0oKXx8JyjshLHrqoUg66+47J6F66ClKSc7CiAgY29uc3Qgbm93PW5ldyBEYXRlKCk7CiAgY29uc3QgZHM9bm93LmdldEZ1bGxZZWFyKCkrJy4nKyhub3cuZ2V0TW9udGgoKSsxKS50b1N0cmluZygpLnBhZFN0YXJ0KDIsJzAnKSsnLicrbm93LmdldERhdGUoKS50b1N0cmluZygpLnBhZFN0YXJ0KDIsJzAnKSsnICcrbm93LmdldEhvdXJzKCkudG9TdHJpbmcoKS5wYWRTdGFydCgyLCcwJykrJzonK25vdy5nZXRNaW51dGVzKCkudG9TdHJpbmcoKS5wYWRTdGFydCgyLCcwJyk7CiAgaGlzdC51bnNoaWZ0KHtpZDpEYXRlLm5vdygpLG5hbWUsdHlwZSxkYXRlOmRzLHJvd3M6cm93cy5tYXAocj0+KHtsOnJbMF0sdjpyWzFdfSkpfSk7CiAgaWYoaGlzdC5sZW5ndGg+MTAwKWhpc3Q9aGlzdC5zbGljZSgwLDEwMCk7CiAgc2F2ZUgoKTsKfQoKZnVuY3Rpb24gcmVuZGVySCgpewogIGNvbnN0IGVsPWRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdobCcpOwogIGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdoY250JykudGV4dENvbnRlbnQ9J+y0nSAnK2hpc3QubGVuZ3RoKyfqsbQg7KCA7J6l65CoJzsKICBpZighaGlzdC5sZW5ndGgpewogICAgZWwuaW5uZXJIVE1MPSc8ZGl2IGNsYXNzPSJoZW1wIj48c3ZnIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3R5bGU9ImRpc3BsYXk6YmxvY2s7bWFyZ2luOjAgYXV0byAxMHB4Ij48cGF0aCBkPSJNNSA4aDE0TTUgOGEyIDIgMCAxMTAtNGgxNGEyIDIgMCAxMTAgNE01IDh2MTBhMiAyIDAgMDAyIDJoMTBhMiAyIDAgMDAyLTJWOCIvPjwvc3ZnPuyggOyepeuQnCDsnbTroKXsnbQg7JeG7Iq164uI64ukPC9kaXY+JzsKICAgIHJldHVybjsKICB9CiAgZWwuaW5uZXJIVE1MPWhpc3QubWFwKGg9PmA8ZGl2IGNsYXNzPSJoaSI+PGRpdiBjbGFzcz0iaGgiPjxkaXY+PHNwYW4gY2xhc3M9Imh0YWciPiR7VExbaC50eXBlXXx8aC50eXBlfTwvc3Bhbj48ZGl2IGNsYXNzPSJobmFtZSI+JHtlc2MoaC5uYW1lKX08L2Rpdj48L2Rpdj48ZGl2IHN0eWxlPSJ0ZXh0LWFsaWduOnJpZ2h0Ij48ZGl2IGNsYXNzPSJobWV0YSI+JHtoLmRhdGV9PC9kaXY+PGJ1dHRvbiBjbGFzcz0iaGRlbCIgb25jbGljaz0iZGVsSCgke2guaWR9KSI+w5c8L2J1dHRvbj48L2Rpdj48L2Rpdj48ZGl2IGNsYXNzPSJocm93cyI+JHtoLnJvd3MubWFwKHI9PmA8ZGl2IGNsYXNzPSJocm93Ij48c3BhbiBjbGFzcz0iaGwiPiR7ci5sfTwvc3Bhbj48c3BhbiBjbGFzcz0iaHYiPiR7ci52fTwvc3Bhbj48L2Rpdj5gKS5qb2luKCcnKX08L2Rpdj48L2Rpdj5gKS5qb2luKCcnKTsKfQpmdW5jdGlvbiBkZWxIKGlkKXtpZighY29uZmlybSgn7J20IOydtOugpeydhCDsgq3soJztlZjsi5zqsqDsirXri4jquYw/JykpcmV0dXJuO2hpc3Q9aGlzdC5maWx0ZXIoaD0+aC5pZCE9PWlkKTtzYXZlSCgpO3JlbmRlckgoKTt9CmZ1bmN0aW9uIGNsckFsbCgpe2lmKCFjb25maXJtKCfsoITssrQg7J2066Cl7J2EIOyCreygnO2VmOyLnOqyoOyKteuLiOq5jD8nKSlyZXR1cm47aGlzdD1bXTtzYXZlSCgpO3JlbmRlckgoKTt9CgovLyDshLjsnKjtkZwKY29uc3QgSUI9W1sxNDAwMDAwMCwuMDYsMF0sWzUwMDAwMDAwLC4xNSwxMjYwMDAwXSxbODgwMDAwMDAsLjI0LDU3NjAwMDBdLFsxNTAwMDAwMDAsLjM1LDE1NDQwMDAwXSxbMzAwMDAwMDAwLC4zOCwxOTk0MDAwMF0sWzUwMDAwMDAwMCwuNDAsMjU5NDAwMDBdLFsxMDAwMDAwMDAwLC40MiwzNTk0MDAwMF0sW0luZmluaXR5LC40NSw2NTk0MDAwMF1dOwpmdW5jdGlvbiBjSVQodCl7Zm9yKGxldCBiIG9mIElCKWlmKHQ8PWJbMF0pcmV0dXJuIE1hdGgubWF4KDAsdCpiWzFdLWJbMl0pO3JldHVybiBNYXRoLm1heCgwLHQqLjQ1LTY1OTQwMDAwKTt9CmNvbnN0IEdCPVtbMTAwMDAwMDAwLC4xMCwwXSxbNTAwMDAwMDAwLC4yMCwxMDAwMDAwMF0sWzEwMDAwMDAwMDAsLjMwLDYwMDAwMDAwXSxbMzAwMDAwMDAwMCwuNDAsMTYwMDAwMDAwXSxbSW5maW5pdHksLjUwLDQ2MDAwMDAwMF1dOwpmdW5jdGlvbiBjR1QodCl7Zm9yKGxldCBiIG9mIEdCKWlmKHQ8PWJbMF0pcmV0dXJuIE1hdGgubWF4KDAsdCpiWzFdLWJbMl0pO3JldHVybiBNYXRoLm1heCgwLHQqLjUwLTQ2MDAwMDAwMCk7fQoKLy8g7KKF7ZWp7IaM65Od7IS4CmZ1bmN0aW9uIGNJbigpewogIGNvbnN0IHJldj1udignaXInKSxleHA9bnYoJ2llJykscHM9K2RvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdpcCcpLnZhbHVlfHwxLGRkPW52KCdpZGMnKSx0Yz1udignaXRjJykscHJlPW52KCdpcHInKTsKICBjb25zdCBpbmM9cmV2LWV4cCxiZD1wcyoxNTAwMDAwLHR4PU1hdGgubWF4KDAsaW5jLWJkLWRkKTsKICBjb25zdCBicj1JQi5maW5kKGI9PnR4PD1iWzBdKTsKICBjb25zdCB0YXg9Y0lUKHR4KSxmaW49TWF0aC5tYXgoMCx0YXgtdGMpLGxvYz1maW4qLjEscGF5PU1hdGgubWF4KDAsZmluLXByZSk7CiAgc2hvd1IoJ3JpJyxbWyfsiJjsnoXquIjslaEnLGZtKHJldildLFsnKC0pIO2VhOyalOqyveu5hCcsZm0oZXhwKV0sWyfshozrk53quIjslaEnLGZtKGluYyldLFsnKC0pIOq4sOuzuOqzteygnCAoJytwcysn7J24KScsZm0oYmQpXSxbJygtKSDquLDtg4Ag7IaM65Od6rO17KCcJyxmbShkZCldLFsn6rO87IS47ZGc7KSAJyxmbSh0eCldLFsn7KCB7JqpIO2VnOqzhOyEuOycqCcsZnAoKGJyP2JyWzFdOi40NSkqMTAwKV0sWyfsgrDstpzshLjslaEnLGZtKHRheCldLFsnKC0pIOyEuOyVoeqzteygnCcsZm0odGMpXSxbJ+qysOygleyEuOyVoScsZm0oZmluKV0sWyfsp4DrsKnshozrk53shLggKDEwJSknLGZtKGxvYyldLFsnKC0pIOq4sOuCqeu2gOyEuOyVoScsZm0ocHJlKV0sWyfsi6TtmqjshLjsnKgnLGZwKHJldj4wP2Zpbi9yZXYqMTAwOjApXSxbJ+uCqeu2gCjtmZjquIkp7ZWgIOyEuOyVoScsZm0ocGF5KV1dLCdpbicpOwp9CgovLyDslpHrj4Tshozrk53shLgKZnVuY3Rpb24gZ0xURCh5LG9oKXsKICBpZihvaD09PSd5Jyl7aWYoeTwzKXJldHVybiAwO3JldHVyblsuMjQsLjMyLC40MCwuNDgsLjU2LC42NCwuNzIsLjgwXVtNYXRoLm1pbih5LTMsNyldO30KICBpZih5PDMpcmV0dXJuIDA7cmV0dXJuWy4wNiwuMDgsLjEwLC4xMiwuMTQsLjE2LC4xOCwuMjAsLjIyLC4yNCwuMjYsLjI4LC4zMF1bTWF0aC5taW4oeS0zLDEyKV07Cn0KZnVuY3Rpb24gY1RyKCl7CiAgY29uc3Qgc2w9bnYoJ3RzJyksYnY9bnYoJ3RiJyksZXg9bnYoJ3RlJykseT0rZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ3R5JykudmFsdWV8fDA7CiAgY29uc3QgdHA9ZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ3R0JykudmFsdWUsb2g9ZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ3RvaCcpLnZhbHVlOwogIGNvbnN0IGdhaW49c2wtYnYtZXg7CiAgaWYoZ2Fpbjw9MCl7c2hvd1IoJ3J0JyxbWyfslpHrj4TssKjsnbUnLGZtKDApXSxbJ+uCqeu2gOyEuOyVoScsJzDsm5AgKOyWkeuPhOywqOyGkCknXV0sJ3RyJyk7cmV0dXJuO30KICBjb25zdCBsdGQ9Z0xURCh5LG9oKSxsYT1nYWluKmx0ZCx0eD1NYXRoLm1heCgwLGdhaW4tbGEtMjUwMDAwMCk7CiAgbGV0IHRheD0wLG10PScnOwogIGlmKHRwPT09J3MxJyl7dGF4PXR4Ki43MDttdD0n64uo6riwIDcwJSc7fQogIGVsc2UgaWYodHA9PT0nczInKXt0YXg9dHgqLjYwO210PSfri6jquLAgNjAlJzt9CiAgZWxzZSBpZih0cD09PSdsZCcpe3RheD1NYXRoLm1heCgwLGNJVCh0eCkpK3R4Ki4xMDttdD0n67mE7IKs7JeF7JqpIO2GoOyngCAo7J2867CYKzEwJXApJzt9CiAgZWxzZXt0YXg9TWF0aC5tYXgoMCxjSVQodHgpKTttdD0n7J2867CY7IS47JyoICjriITsp4QpJzt9CiAgY29uc3QgbG9jPXRheCouMTA7CiAgc2hvd1IoJ3J0JyxbWyfslpHrj4TqsIDslaEnLGZtKHNsKV0sWycoLSkg7Leo65Od6rCA7JWhJyxmbShidildLFsnKC0pIO2VhOyalOqyveu5hCcsZm0oZXgpXSxbJ+yWkeuPhOywqOydtScsZm0oZ2FpbildLFsn7J6l6riw67O07Jyg7Yq567OE6rO17KCcJyxmcChsdGQqMTAwKSsnIOKGkiAnK2ZtKGxhKV0sWycoLSkg6riw67O46rO17KCcJyxmbSgyNTAwMDAwKV0sWyfqs7zshLjtkZzspIAnLGZtKHR4KV0sWyfqs7zshLjrsKnsi50nLG10XSxbJ+yCsOy2nOyEuOyVoScsZm0odGF4KV0sWyfsp4DrsKnshozrk53shLggKDEwJSknLGZtKGxvYyldLFsn7Iuk7Zqo7IS47JyoICjssKjsnbUg64yA67mEKScsZnAoZ2Fpbj4wP3RheC9nYWluKjEwMDowKV0sWyftlanqs4Qg64Kp67aA7IS47JWhJyxmbSh0YXgrbG9jKV1dLCd0cicpOwp9CgovLyDspp3sl6zshLgKY29uc3QgUk09e3NwOjYwMDAwMDAwMCxjaDo1MDAwMDAwMCxjbToyMDAwMDAwMCxwYTo1MDAwMDAwMCxvdDoxMDAwMDAwMCxzdDowfTsKZnVuY3Rpb24gY0dpKCl7CiAgY29uc3QgYW10PW52KCdnYScpLHJlbD1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnZ3InKS52YWx1ZSxwdj1udignZ3AnKSxycD1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnZ3JwJykudmFsdWU9PT0neSc7CiAgY29uc3QgZGQ9Uk1bcmVsXXx8MCxjYj1hbXQrcHYsdHg9TWF0aC5tYXgoMCxjYi1kZCk7CiAgY29uc3QgdG90PWNHVCh0eCkscHR4PWNHVChNYXRoLm1heCgwLHB2LWRkKSk7CiAgbGV0IHRoPU1hdGgubWF4KDAsdG90LXB0eCksY3I9cnA/TWF0aC5yb3VuZCh0aCouMDMpOjAsZm49TWF0aC5tYXgoMCx0aC1jcik7CiAgY29uc3QgYnI9R0IuZmluZChiPT50eDw9YlswXSk7CiAgc2hvd1IoJ3JnJyxbWyfspp3sl6zsnqzsgrDqsIDslaEnLGZtKGFtdCldLFsnKCspIO2VqeyCsCDspp3sl6zslaEnLGZtKHB2KV0sWyftlansgrAg7Kad7Jes7J6s7IKwJyxmbShjYildLFsnKC0pIOymneyXrOyerOyCsOqzteygnCcsZm0oZGQpXSxbJ+qzvOyEuO2RnOykgCcsZm0odHgpXSxbJ+yggeyaqSDtlZzqs4TshLjsnKgnLGZwKChicj9iclsxXTouNTApKjEwMCldLFsn7ZWp7IKwIOq4sOykgCDsgrDstpzshLjslaEnLGZtKHRvdCldLFsnKC0pIOq4sOyhtCDspp3sl6wg7IKw7Lac7IS47JWhJyxmbShwdHgpXSxbJ+ydtOuyiCDspp3sl6wg7IKw7Lac7IS47JWhJyxmbSh0aCldLFsnKC0pIOyLoOqzoOyEuOyVoeqzteygnCAoMyUpJyxmbShjcildLFsn64Kp67aA7IS47JWhJyxmbShmbildXSwnZ2knKTsKfQoKLy8g7IOB7IaN7IS4CmZ1bmN0aW9uIGNJaCgpewogIGNvbnN0IHRvdD1udignaHQnKSxkYnQ9bnYoJ2hkJyksc3A9ZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2hzcCcpLnZhbHVlPT09J3knLHNhPW52KCdoc2EnKSxmaW49bnYoJ2hmJykscnA9ZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2hycCcpLnZhbHVlPT09J3knOwogIGNvbnN0IG5ldD1NYXRoLm1heCgwLHRvdC1kYnQpLHNwRD1zcD9NYXRoLm1pbihNYXRoLm1heChzYSw1MDAwMDAwMDApLDMwMDAwMDAwMDApOjA7CiAgY29uc3QgdXNlZD1NYXRoLm1heCg1MDAwMDAwMDAsMjAwMDAwMDAwK3NwRCksZmQ9TWF0aC5taW4oZmluKi4yMCwyMDAwMDAwMDApLHR4PU1hdGgubWF4KDAsbmV0LXVzZWQtZmQpOwogIGxldCB0YXg9Y0dUKHR4KSxjcj1ycD9NYXRoLnJvdW5kKHRheCouMDMpOjAsZm49TWF0aC5tYXgoMCx0YXgtY3IpOwogIHNob3dSKCdyaCcsW1sn7LSdIOyDgeyGjeyerOyCsOqwgOyVoScsZm0odG90KV0sWycoLSkg7LGE66y0wrfsnqXroYDruYQnLGZtKGRidCldLFsn7IicIOyDgeyGjeyerOyCsCcsZm0obmV0KV0sWyfqs7XsoJzrsKnsi50nLHVzZWQ9PT01MDAwMDAwMDA/J+ydvOq0hOqzteygnCDshKDtg50gKDXslrUpJzon6riw7LSI6rO17KCcK+uwsOyasOyekOqzteygnCDshKDtg50nXSxbJygtKSDsoIHsmqkg6rO17KCc7JWhJyxmbSh1c2VkKV0sWycoLSkg6riI7Jy17J6s7IKwIOqzteygnCAoMjAlKScsZm0oZmQpXSxbJ+qzvOyEuO2RnOykgCcsZm0odHgpXSxbJ+yCsOy2nOyEuOyVoScsZm0odGF4KV0sWycoLSkg7Iug6rOg7IS47JWh6rO17KCcICgzJSknLGZtKGNyKV0sWyfsi6TtmqjshLjsnKggKOyInOyerOyCsCDrjIDruYQpJyxmcChuZXQ+MD9mbi9uZXQqMTAwOjApXSxbJ+uCqeu2gOyEuOyVoScsZm0oZm4pXV0sJ2loJyk7Cn0KCmxvYWRIKCk7Cjwvc2NyaXB0Pgo8L2JvZHk+CjwvaHRtbD4K';
+function _b64dec(s){
+  try{return decodeURIComponent(atob(s).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));}
+  catch(e){return atob(s);}
 }
-@media(prefers-color-scheme:dark){:root{
-  --bg:#1e1e1e;--bg2:#282828;--bg3:#333;
-  --tx:#e4e4e4;--tx2:#999;--tx3:#666;
-  --bd:rgba(255,255,255,0.12);--bd2:rgba(255,255,255,0.22);
-  --blue:#6aacf5;--blue-bg:#162840;--red:#f87171
-}}
-body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR','Segoe UI',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
-.wrap{max-width:660px;margin:0 auto;padding:20px 16px 60px}
-h1{font-size:20px;font-weight:700;margin-bottom:3px}
-.sub{font-size:12px;color:var(--tx2);margin-bottom:18px}
-.mtabs{display:flex;border-bottom:1px solid var(--bd);margin-bottom:18px}
-.mt{padding:10px 16px;font-size:14px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:5px;font-family:inherit}
-.mt.on{color:var(--tx);border-bottom-color:var(--tx)}
-.stabs{display:flex;border-bottom:1px solid var(--bd);margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
-.stabs::-webkit-scrollbar{display:none}
-.st{padding:8px 13px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;font-family:inherit}
-.st.on{color:var(--tx);border-bottom-color:var(--tx)}
-.pnl{display:none}.pnl.on{display:block}
-.nbox{display:flex;align-items:center;gap:8px;padding:9px 13px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rsm);margin-bottom:14px}
-.nbox label{font-size:12px;color:var(--tx2);white-space:nowrap}
-.nbox input{flex:1;border:none;background:transparent;font-size:14px;color:var(--tx);outline:none;min-width:0;font-family:inherit}
-.nbox input::placeholder{color:var(--tx3)}
-.sl{font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--tx2);text-transform:uppercase;margin:12px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--bd)}
-.r2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-.fd{display:flex;flex-direction:column;gap:4px}
-.fd label{font-size:12px;color:var(--tx2)}
-.fd input,.fd select{font-size:14px;padding:8px 10px;border:1px solid var(--bd);border-radius:var(--rsm);background:var(--bg);color:var(--tx);width:100%;outline:none;transition:border-color .15s;-webkit-appearance:none;appearance:none;font-family:inherit}
-.fd select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
-.fd input:focus,.fd select:focus{border-color:var(--blue)}
-.cbtn{width:100%;margin-top:12px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--bd2);border-radius:var(--rsm);background:var(--bg);color:var(--tx);font-family:inherit;transition:background .12s}
-.cbtn:hover{background:var(--bg3)}.cbtn:active{transform:scale(.99)}
-.rbx{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:13px 15px;margin-top:12px}
-.rhead{font-size:11px;color:var(--tx2);margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid var(--bd)}
-.rr{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--bd);font-size:13px}
-.rr:last-child{border-bottom:none;padding-top:8px}
-.rr.tot .rl{font-weight:600;font-size:14px}
-.rr.tot .rv{font-weight:700;font-size:16px;color:var(--blue)}
-.rr .rl{color:var(--tx2)}.rr .rv{color:var(--tx)}
-.note{font-size:11px;color:var(--tx3);margin-top:9px;line-height:1.6}
-.htop{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.hcntlbl{font-size:13px;color:var(--tx2)}
-.clrbtn{font-size:12px;color:var(--red);border:none;background:none;cursor:pointer;padding:4px 8px;font-family:inherit}
-.hemp{text-align:center;padding:40px 0;color:var(--tx3);font-size:13px}
-.hi{border:1px solid var(--bd);border-radius:var(--r);padding:13px 15px;margin-bottom:10px;background:var(--bg)}
-.hh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
-.htag{font-size:11px;padding:2px 9px;border-radius:20px;background:var(--blue-bg);color:var(--blue);font-weight:600;display:inline-block;margin-bottom:4px}
-.hname{font-size:15px;font-weight:600}
-.hmeta{font-size:11px;color:var(--tx3);text-align:right;margin-top:3px}
-.hdel{border:none;background:none;cursor:pointer;color:var(--tx3);font-size:20px;padding:0 4px;line-height:1;font-family:inherit}
-.hdel:hover{color:var(--red)}
-.hrows{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin-top:6px}
-.hrow{font-size:12px;display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid var(--bd)}
-.hrow .hl{color:var(--tx2)}.hrow .hv{color:var(--tx);text-align:right}
-@media(max-width:480px){.r2{grid-template-columns:1fr}.hrows{grid-template-columns:1fr}}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h1>세금 모의 계산기</h1>
-  <p class="sub">종합소득세 · 양도소득세 · 증여세 · 상속세 &nbsp;|&nbsp; 2024년 귀속 기준 &nbsp;|&nbsp; 모의계산 전용 참고자료</p>
-
-  <div class="mtabs">
-    <button class="mt on" onclick="sm('c')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="12" y2="14"/></svg>
-      모의계산
-    </button>
-    <button class="mt" onclick="sm('h')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
-      계산 이력
-    </button>
-  </div>
-
-  <div id="mc">
-    <div class="nbox">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <label>성명 / 상호</label>
-      <input type="text" id="tname" placeholder="홍길동  또는  (주)한국세무" maxlength="40">
-    </div>
-    <div class="stabs">
-      <button class="st on" onclick="ss('in')">종합소득세</button>
-      <button class="st" onclick="ss('tr')">양도소득세</button>
-      <button class="st" onclick="ss('gi')">증여세</button>
-      <button class="st" onclick="ss('ih')">상속세</button>
-    </div>
-
-    <!-- 종합소득세 -->
-    <div id="p-in" class="pnl on">
-      <div class="sl">소득 입력</div>
-      <div class="r2">
-        <div class="fd"><label>수입금액 (원)</label><input type="text" id="ir" placeholder="100,000,000" class="ni"></div>
-        <div class="fd"><label>필요경비 (원)</label><input type="text" id="ie" placeholder="30,000,000" class="ni"></div>
-      </div>
-      <div class="r2">
-        <div class="fd"><label>기본공제 인원수 (본인 포함)</label><input type="number" id="ip" value="1" min="1" max="10"></div>
-        <div class="fd"><label>기타 소득공제 (원)</label><input type="text" id="idc" placeholder="0" class="ni"></div>
-      </div>
-      <div class="r2">
-        <div class="fd"><label>세액공제 (원)</label><input type="text" id="itc" placeholder="0" class="ni"></div>
-        <div class="fd"><label>기납부세액 (원)</label><input type="text" id="ipr" placeholder="0" class="ni"></div>
-      </div>
-      <button class="cbtn" onclick="cIn()">계산하기</button>
-      <div id="ri"></div>
-      <p class="note">※ 지방소득세(소득세의 10%) 별도 · 기본공제 1인당 150만원 · 2024년 귀속 기준</p>
-    </div>
-
-    <!-- 양도소득세 -->
-    <div id="p-tr" class="pnl">
-      <div class="sl">양도 정보</div>
-      <div class="r2">
-        <div class="fd"><label>양도가액 (원)</label><input type="text" id="ts" placeholder="500,000,000" class="ni"></div>
-        <div class="fd"><label>취득가액 (원)</label><input type="text" id="tb" placeholder="300,000,000" class="ni"></div>
-      </div>
-      <div class="r2">
-        <div class="fd"><label>필요경비 (원)</label><input type="text" id="te" placeholder="10,000,000" class="ni"></div>
-        <div class="fd"><label>보유기간 (년)</label><input type="number" id="ty" placeholder="5" min="0" step="1"></div>
-      </div>
-      <div class="r2">
-        <div class="fd"><label>자산 구분</label>
-          <select id="tt">
-            <option value="g">일반 부동산</option>
-            <option value="s1">단기양도 (1년 미만)</option>
-            <option value="s2">단기양도 (1~2년)</option>
-            <option value="ld">비사업용 토지</option>
-          </select>
-        </div>
-        <div class="fd"><label>1세대 1주택 여부</label>
-          <select id="toh">
-            <option value="n">해당 없음</option>
-            <option value="y">해당 (2년 이상 보유)</option>
-          </select>
-        </div>
-      </div>
-      <button class="cbtn" onclick="cTr()">계산하기</button>
-      <div id="rt"></div>
-      <p class="note">※ 기본공제 250만원/년 · 지방소득세 별도 · 비과세 요건 상세 충족 여부는 별도 검토 필요</p>
-    </div>
-
-    <!-- 증여세 -->
-    <div id="p-gi" class="pnl">
-      <div class="sl">증여 정보</div>
-      <div class="r2">
-        <div class="fd"><label>증여재산가액 (원)</label><input type="text" id="ga" placeholder="200,000,000" class="ni"></div>
-        <div class="fd"><label>수증자와의 관계</label>
-          <select id="gr">
-            <option value="sp">배우자 (6억 공제)</option>
-            <option value="ch">직계비속 — 성년 자녀 (5,000만원)</option>
-            <option value="cm">직계비속 — 미성년 자녀 (2,000만원)</option>
-            <option value="pa">직계존속 — 부모 (5,000만원)</option>
-            <option value="ot">기타 친족 (1,000만원)</option>
-            <option value="st">타인 (공제 없음)</option>
-          </select>
-        </div>
-      </div>
-      <div class="r2">
-        <div class="fd"><label>10년 내 사전 증여 합산액 (원)</label><input type="text" id="gp" placeholder="0" class="ni"></div>
-        <div class="fd"><label>신고세액공제 적용</label>
-          <select id="grp"><option value="y">적용 (3%)</option><option value="n">미적용</option></select>
-        </div>
-      </div>
-      <button class="cbtn" onclick="cGi()">계산하기</button>
-      <div id="rg"></div>
-      <p class="note">※ 증여재산공제는 10년 합산 한도 적용 · 공익법인 출연 등 특례 별도</p>
-    </div>
-
-    <!-- 상속세 -->
-    <div id="p-ih" class="pnl">
-      <div class="sl">상속 정보</div>
-      <div class="r2">
-        <div class="fd"><label>총 상속재산가액 (원)</label><input type="text" id="ht" placeholder="1,000,000,000" class="ni"></div>
-        <div class="fd"><label>채무·장례비·공과금 (원)</label><input type="text" id="hd" placeholder="0" class="ni"></div>
-      </div>
-      <div class="r2">
-        <div class="fd"><label>배우자 상속 여부</label>
-          <select id="hsp"><option value="y">있음</option><option value="n">없음</option></select>
-        </div>
-        <div class="fd"><label>배우자 실제 상속액 (원)</label><input type="text" id="hsa" placeholder="500,000,000" class="ni"></div>
-      </div>
-      <div class="r2">
-        <div class="fd"><label>금융재산 (원)</label><input type="text" id="hf" placeholder="0" class="ni"></div>
-        <div class="fd"><label>신고세액공제 적용</label>
-          <select id="hrp"><option value="y">적용 (3%)</option><option value="n">미적용</option></select>
-        </div>
-      </div>
-      <button class="cbtn" onclick="cIh()">계산하기</button>
-      <div id="rh"></div>
-      <p class="note">※ 일괄공제(5억) vs 기초공제+배우자공제 중 유리한 방법 자동 선택</p>
-    </div>
-  </div>
-
-  <!-- 이력 탭 -->
-  <div id="mh" style="display:none">
-    <div class="htop">
-      <span class="hcntlbl" id="hcnt"></span>
-      <button class="clrbtn" onclick="clrAll()">전체 삭제</button>
-    </div>
-    <div id="hl"></div>
-  </div>
-</div>
-
-<script>
-const SK='tax-calc-v1';
-const TL={in:'종합소득세',tr:'양도소득세',gi:'증여세',ih:'상속세'};
-let hist=[];
-
-function loadH(){try{const s=localStorage.getItem(SK);if(s)hist=JSON.parse(s);}catch(e){hist=[];}}
-function saveH(){try{localStorage.setItem(SK,JSON.stringify(hist));}catch(e){}}
-
-document.addEventListener('input',function(e){
-  if(!e.target.classList.contains('ni'))return;
-  const el=e.target,pos=el.selectionStart,prev=el.value.length;
-  const raw=el.value.replace(/[^0-9]/g,'');
-  if(!raw){el.value='';return;}
-  el.value=Number(raw).toLocaleString('ko-KR');
-  try{const d=el.value.length-prev;el.setSelectionRange(pos+d,pos+d);}catch(x){}
-});
-
-function nv(id){return parseFloat((document.getElementById(id).value||'').replace(/,/g,''))||0;}
-function fm(n){return Math.round(n).toLocaleString('ko-KR')+'원';}
-function fp(n){return(Math.round(n*10)/10)+'%';}
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-
-function sm(t){
-  document.querySelectorAll('.mt').forEach((el,i)=>el.classList.toggle('on',['c','h'][i]===t));
-  document.getElementById('mc').style.display=t==='c'?'block':'none';
-  document.getElementById('mh').style.display=t==='h'?'block':'none';
-  if(t==='h')renderH();
-}
-function ss(id){
-  document.querySelectorAll('.st').forEach((el,i)=>el.classList.toggle('on',['in','tr','gi','ih'][i]===id));
-  document.querySelectorAll('.pnl').forEach(p=>p.classList.toggle('on',p.id==='p-'+id));
-}
-
-function showR(rid,rows,type){
-  let h='<div class="rbx"><div class="rhead">계산 결과</div>';
-  rows.forEach((r,i)=>{
-    h+=\`<div class="rr\${i===rows.length-1?' tot':''}"><span class="rl">\${r[0]}</span><span class="rv">\${r[1]}</span></div>\`;
-  });
-  document.getElementById(rid).innerHTML=h+'</div>';
-  addH(type,rows);
-}
-
-function addH(type,rows){
-  const name=document.getElementById('tname').value.trim()||'(성명 미입력)';
-  const now=new Date();
-  const ds=now.getFullYear()+'.'+(now.getMonth()+1).toString().padStart(2,'0')+'.'+now.getDate().toString().padStart(2,'0')+' '+now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
-  hist.unshift({id:Date.now(),name,type,date:ds,rows:rows.map(r=>({l:r[0],v:r[1]}))});
-  if(hist.length>100)hist=hist.slice(0,100);
-  saveH();
-}
-
-function renderH(){
-  const el=document.getElementById('hl');
-  document.getElementById('hcnt').textContent='총 '+hist.length+'건 저장됨';
-  if(!hist.length){
-    el.innerHTML='<div class="hemp"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 10px"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/></svg>저장된 이력이 없습니다</div>';
-    return;
-  }
-  el.innerHTML=hist.map(h=>\`<div class="hi"><div class="hh"><div><span class="htag">\${TL[h.type]||h.type}</span><div class="hname">\${esc(h.name)}</div></div><div style="text-align:right"><div class="hmeta">\${h.date}</div><button class="hdel" onclick="delH(\${h.id})">×</button></div></div><div class="hrows">\${h.rows.map(r=>\`<div class="hrow"><span class="hl">\${r.l}</span><span class="hv">\${r.v}</span></div>\`).join('')}</div></div>\`).join('');
-}
-function delH(id){if(!confirm('이 이력을 삭제하시겠습니까?'))return;hist=hist.filter(h=>h.id!==id);saveH();renderH();}
-function clrAll(){if(!confirm('전체 이력을 삭제하시겠습니까?'))return;hist=[];saveH();renderH();}
-
-// 세율표
-const IB=[[14000000,.06,0],[50000000,.15,1260000],[88000000,.24,5760000],[150000000,.35,15440000],[300000000,.38,19940000],[500000000,.40,25940000],[1000000000,.42,35940000],[Infinity,.45,65940000]];
-function cIT(t){for(let b of IB)if(t<=b[0])return Math.max(0,t*b[1]-b[2]);return Math.max(0,t*.45-65940000);}
-const GB=[[100000000,.10,0],[500000000,.20,10000000],[1000000000,.30,60000000],[3000000000,.40,160000000],[Infinity,.50,460000000]];
-function cGT(t){for(let b of GB)if(t<=b[0])return Math.max(0,t*b[1]-b[2]);return Math.max(0,t*.50-460000000);}
-
-// 종합소득세
-function cIn(){
-  const rev=nv('ir'),exp=nv('ie'),ps=+document.getElementById('ip').value||1,dd=nv('idc'),tc=nv('itc'),pre=nv('ipr');
-  const inc=rev-exp,bd=ps*1500000,tx=Math.max(0,inc-bd-dd);
-  const br=IB.find(b=>tx<=b[0]);
-  const tax=cIT(tx),fin=Math.max(0,tax-tc),loc=fin*.1,pay=Math.max(0,fin-pre);
-  showR('ri',[['수입금액',fm(rev)],['(-) 필요경비',fm(exp)],['소득금액',fm(inc)],['(-) 기본공제 ('+ps+'인)',fm(bd)],['(-) 기타 소득공제',fm(dd)],['과세표준',fm(tx)],['적용 한계세율',fp((br?br[1]:.45)*100)],['산출세액',fm(tax)],['(-) 세액공제',fm(tc)],['결정세액',fm(fin)],['지방소득세 (10%)',fm(loc)],['(-) 기납부세액',fm(pre)],['실효세율',fp(rev>0?fin/rev*100:0)],['납부(환급)할 세액',fm(pay)]],'in');
-}
-
-// 양도소득세
-function gLTD(y,oh){
-  if(oh==='y'){if(y<3)return 0;return[.24,.32,.40,.48,.56,.64,.72,.80][Math.min(y-3,7)];}
-  if(y<3)return 0;return[.06,.08,.10,.12,.14,.16,.18,.20,.22,.24,.26,.28,.30][Math.min(y-3,12)];
-}
-function cTr(){
-  const sl=nv('ts'),bv=nv('tb'),ex=nv('te'),y=+document.getElementById('ty').value||0;
-  const tp=document.getElementById('tt').value,oh=document.getElementById('toh').value;
-  const gain=sl-bv-ex;
-  if(gain<=0){showR('rt',[['양도차익',fm(0)],['납부세액','0원 (양도차손)']],'tr');return;}
-  const ltd=gLTD(y,oh),la=gain*ltd,tx=Math.max(0,gain-la-2500000);
-  let tax=0,mt='';
-  if(tp==='s1'){tax=tx*.70;mt='단기 70%';}
-  else if(tp==='s2'){tax=tx*.60;mt='단기 60%';}
-  else if(tp==='ld'){tax=Math.max(0,cIT(tx))+tx*.10;mt='비사업용 토지 (일반+10%p)';}
-  else{tax=Math.max(0,cIT(tx));mt='일반세율 (누진)';}
-  const loc=tax*.10;
-  showR('rt',[['양도가액',fm(sl)],['(-) 취득가액',fm(bv)],['(-) 필요경비',fm(ex)],['양도차익',fm(gain)],['장기보유특별공제',fp(ltd*100)+' → '+fm(la)],['(-) 기본공제',fm(2500000)],['과세표준',fm(tx)],['과세방식',mt],['산출세액',fm(tax)],['지방소득세 (10%)',fm(loc)],['실효세율 (차익 대비)',fp(gain>0?tax/gain*100:0)],['합계 납부세액',fm(tax+loc)]],'tr');
-}
-
-// 증여세
-const RM={sp:600000000,ch:50000000,cm:20000000,pa:50000000,ot:10000000,st:0};
-function cGi(){
-  const amt=nv('ga'),rel=document.getElementById('gr').value,pv=nv('gp'),rp=document.getElementById('grp').value==='y';
-  const dd=RM[rel]||0,cb=amt+pv,tx=Math.max(0,cb-dd);
-  const tot=cGT(tx),ptx=cGT(Math.max(0,pv-dd));
-  let th=Math.max(0,tot-ptx),cr=rp?Math.round(th*.03):0,fn=Math.max(0,th-cr);
-  const br=GB.find(b=>tx<=b[0]);
-  showR('rg',[['증여재산가액',fm(amt)],['(+) 합산 증여액',fm(pv)],['합산 증여재산',fm(cb)],['(-) 증여재산공제',fm(dd)],['과세표준',fm(tx)],['적용 한계세율',fp((br?br[1]:.50)*100)],['합산 기준 산출세액',fm(tot)],['(-) 기존 증여 산출세액',fm(ptx)],['이번 증여 산출세액',fm(th)],['(-) 신고세액공제 (3%)',fm(cr)],['납부세액',fm(fn)]],'gi');
-}
-
-// 상속세
-function cIh(){
-  const tot=nv('ht'),dbt=nv('hd'),sp=document.getElementById('hsp').value==='y',sa=nv('hsa'),fin=nv('hf'),rp=document.getElementById('hrp').value==='y';
-  const net=Math.max(0,tot-dbt),spD=sp?Math.min(Math.max(sa,500000000),3000000000):0;
-  const used=Math.max(500000000,200000000+spD),fd=Math.min(fin*.20,200000000),tx=Math.max(0,net-used-fd);
-  let tax=cGT(tx),cr=rp?Math.round(tax*.03):0,fn=Math.max(0,tax-cr);
-  showR('rh',[['총 상속재산가액',fm(tot)],['(-) 채무·장례비',fm(dbt)],['순 상속재산',fm(net)],['공제방식',used===500000000?'일괄공제 선택 (5억)':'기초공제+배우자공제 선택'],['(-) 적용 공제액',fm(used)],['(-) 금융재산 공제 (20%)',fm(fd)],['과세표준',fm(tx)],['산출세액',fm(tax)],['(-) 신고세액공제 (3%)',fm(cr)],['실효세율 (순재산 대비)',fp(net>0?fn/net*100:0)],['납부세액',fm(fn)]],'ih');
-}
-
-loadH();
-</script>
-</body>
-</html>
-`;
-
-let _calcLoaded = false;
+let _calcReady=false;
 function openCalc(){
-  if(!_calcLoaded){
-    try {
-      const blob = new Blob([CALC_HTML], {type:'text/html;charset=utf-8'});
-      document.getElementById('calc-frame').src = URL.createObjectURL(blob);
-      _calcLoaded = true;
-    } catch(e) {
-      document.getElementById('calc-frame').srcdoc = CALC_HTML;
-      _calcLoaded = true;
+  if(!_calcReady){
+    const html=_b64dec(_CB64);
+    const fr=document.getElementById('calc-frame');
+    try{
+      const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+      fr.src=URL.createObjectURL(blob);
+    }catch(e){
+      fr.srcdoc=html;
     }
+    _calcReady=true;
   }
   document.getElementById('calc-overlay').classList.add('open');
 }

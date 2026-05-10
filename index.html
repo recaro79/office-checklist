@@ -115,6 +115,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR
 .modal-btns { display: flex; gap: 8px; }
 .btn-cancel { flex: 1; padding: 11px; border: 1.5px solid #e2e8f0; border-radius: 8px; background: white; cursor: pointer; font-size: 14px; }
 .btn-ok { flex: 2; padding: 11px; background: #5a67d8; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+/* ── 신고기한 섹션 ── */
+.deadline-section { background: #f8faff; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; border: 1px solid #e8f0fe; }
+.deadline-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.dl-label { font-size: 12px; font-weight: 700; color: #4a5568; white-space: nowrap; }
+.date-inp { padding: 4px 8px; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 12px; font-family: inherit; outline: none; color: #4a5568; cursor: pointer; }
+.date-inp:focus { border-color: #5a67d8; }
+.deadline-badge { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.deadline-date { font-size: 12px; font-weight: 600; color: #2d3748; }
+.days-left { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 20px; color: white; white-space: nowrap; }
+.days-left.ok   { background: #48bb78; }
+.days-left.warn { background: #f6ad55; }
+.days-left.over { background: #e53e3e; }
 </style>
 </head>
 <body>
@@ -339,7 +352,8 @@ function buildCard(cl){
       <span class="chevron ${isOpen?'open':''}">▼</span>
     </div>
     <div class="client-body ${isOpen?'open':''}">
-      <div class="body-divider"></div>`;
+      <div class="body-divider"></div>
+      ${buildDeadlineSection(cl)}`;
   tasks.forEach((task,i)=>{
     const isEd=editingTask&&editingTask.cid===cl.id&&editingTask.idx===i;
     const iIns=insertingAt&&insertingAt.cid===cl.id&&insertingAt.idx===i+1;
@@ -452,6 +466,57 @@ async function addClient(){
     clients.push(rec);openCards[rec.id]=true;renderAll();setSync('ok','저장됨');
   }catch(e){setSync('err','저장 실패');alert('저장 실패: '+e.message);}
 }
+
+// ════════════ 신고기한 계산 ════════════
+const DATE_LABEL = {'양도소득세':'양도일','증여세':'증여일','상속세':'상속일'};
+const DATE_MONTHS = {'양도소득세':2,'증여세':3,'상속세':6};
+
+function calcDeadline(dateStr, category){
+  if(!dateStr || !DATE_MONTHS[category]) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d.getTime())) return null;
+  const totalM = d.getMonth() + DATE_MONTHS[category];
+  const y = d.getFullYear() + Math.floor(totalM/12);
+  const m = totalM % 12;
+  return new Date(y, m+1, 0); // 해당 월의 말일
+}
+
+function buildDeadlineSection(cl){
+  const label = DATE_LABEL[cl.category];
+  if(!label) return '';
+  const deadline = calcDeadline(cl.event_date, cl.category);
+  const today = new Date(); today.setHours(0,0,0,0);
+  let badgeHTML = '';
+  if(deadline){
+    const days = Math.ceil((deadline - today) / 86400000);
+    const cls = days < 0 ? 'over' : days <= 30 ? 'warn' : 'ok';
+    const daysTxt = days < 0 ? `${Math.abs(days)}일 초과` : days === 0 ? '오늘 마감' : `D-${days}`;
+    const dateTxt = deadline.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
+    badgeHTML = `<div class="deadline-badge">
+      <span class="deadline-date">📅 신고마감: ${dateTxt}</span>
+      <span class="days-left ${cls}">${daysTxt}</span>
+    </div>`;
+  }
+  return `<div class="deadline-section">
+    <div class="deadline-row">
+      <span class="dl-label">${label}</span>
+      <input type="date" class="date-inp" value="${cl.event_date||''}"
+        onclick="event.stopPropagation()"
+        onchange="saveDate('${cl.id}',this.value)" />
+    </div>
+    ${badgeHTML}
+  </div>`;
+}
+
+async function saveDate(cid, val){
+  const cl = findCl(cid); if(!cl) return;
+  cl.event_date = val;
+  openCards[cid] = true;
+  renderContent();
+  await apiPatch(cid, {event_date: val || null});
+  setSync('ok','저장됨');
+}
+
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 </script>
 </body>

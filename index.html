@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>사무실 업무 체크리스트</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;background:#f0f4f8;color:#1a202c;font-size:14px}
@@ -350,27 +351,49 @@ async function apiPatch(id,fields){
 async function apiDelete(id){
   await fetch(`${SB_URL}/rest/v1/office_checklist?id=eq.${id}`,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
 }
-function getIncUrl(){return localStorage.getItem('sb_url')||localStorage.getItem('oc2_url')||SB_URL;}
-function getIncKey(){return localStorage.getItem('sb_key')||localStorage.getItem('oc2_key')||SB_KEY;}
+let _sbInc=null;
+function getIncSb(){
+  if(_sbInc)return _sbInc;
+  const url=localStorage.getItem('sb_url')||localStorage.getItem('oc2_url')||SB_URL;
+  const key=localStorage.getItem('sb_key')||localStorage.getItem('oc2_key')||SB_KEY;
+  if(url&&key&&window.supabase)_sbInc=window.supabase.createClient(url,key);
+  return _sbInc;
+}
 async function loadIncomeTab(tab){
-  const iUrl=getIncUrl(),iKey=getIncKey();
-  const key=EMP_NAME+'_'+tab;
+  const empKey=EMP_NAME+'_'+tab;
   try{
-    const r=await fetch(`${iUrl}/rest/v1/checklist_data?employee=eq.${encodeURIComponent(key)}&select=payload`,{headers:{'apikey':iKey,'Authorization':`Bearer ${iKey}`}});
-    const rows=await r.json();
-    if(rows&&rows[0])incomeData[tab]=JSON.parse(rows[0].payload||'[]');
-    else incomeData[tab]=[];
+    const sb=getIncSb();
+    if(sb){
+      const{data:rows,error}=await sb.from('checklist_data').select('payload').eq('employee',empKey).single();
+      if(error&&error.code==='PGRST116')incomeData[tab]=[];
+      else if(error)throw error;
+      else incomeData[tab]=JSON.parse((rows&&rows.payload)||'[]');
+    }else{
+      const iUrl=localStorage.getItem('sb_url')||SB_URL;
+      const iKey=localStorage.getItem('sb_key')||SB_KEY;
+      const r=await fetch(`${iUrl}/rest/v1/checklist_data?employee=eq.${encodeURIComponent(empKey)}&select=payload`,{headers:{'apikey':iKey,'Authorization':`Bearer ${iKey}`}});
+      const data=await r.json();
+      if(Array.isArray(data)&&data[0])incomeData[tab]=JSON.parse(data[0].payload||'[]');
+      else incomeData[tab]=[];
+    }
     setSync('ok','동기화 완료');
-  }catch(e){setSync('err','불러오기 실패');}
+  }catch(e){console.error('loadIncomeTab error:',e);setSync('err','불러오기 실패');}
   renderIncomeTab(tab);
 }
 function scheduleIncSave(tab){clearTimeout(incSaveTimer[tab]);incSaveTimer[tab]=setTimeout(()=>saveIncomeTab(tab),1500);}
 async function saveIncomeTab(tab){
-  const iUrl=getIncUrl(),iKey=getIncKey();
-  const key=EMP_NAME+'_'+tab;
+  const empKey=EMP_NAME+'_'+tab;
   const payload=JSON.stringify(incomeData[tab]);
   try{
-    await fetch(`${iUrl}/rest/v1/checklist_data`,{method:'POST',headers:{'apikey':iKey,'Authorization':`Bearer ${iKey}`,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},body:JSON.stringify({employee:key,payload,updated_at:new Date().toISOString()})});
+    const sb=getIncSb();
+    if(sb){
+      const{error}=await sb.from('checklist_data').upsert({employee:empKey,payload,updated_at:new Date().toISOString()});
+      if(error)throw error;
+    }else{
+      const iUrl=localStorage.getItem('sb_url')||SB_URL;
+      const iKey=localStorage.getItem('sb_key')||SB_KEY;
+      await fetch(`${iUrl}/rest/v1/checklist_data`,{method:'POST',headers:{'apikey':iKey,'Authorization':`Bearer ${iKey}`,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},body:JSON.stringify({employee:empKey,payload,updated_at:new Date().toISOString()})});
+    }
     setSync('ok','저장됨');
   }catch(e){setSync('err','저장 실패');}
 }

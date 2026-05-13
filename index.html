@@ -361,23 +361,30 @@ function getIncSb(){
 }
 async function loadIncomeTab(tab){
   const empKey=EMP_NAME+'_'+tab;
+  const iUrl=localStorage.getItem('sb_url')||localStorage.getItem('oc2_url')||SB_URL;
+  const iKey=localStorage.getItem('sb_key')||localStorage.getItem('oc2_key')||SB_KEY;
+  // 디버그 정보 표시
+  const dbg=document.getElementById('inc-debug');
+  if(dbg)dbg.textContent='검색 중: URL='+iUrl.slice(0,30)+'... / KEY='+iKey.slice(0,10)+'... / EMP='+empKey;
   try{
-    const sb=getIncSb();
-    if(sb){
-      const{data:rows,error}=await sb.from('checklist_data').select('payload').eq('employee',empKey).single();
-      if(error&&error.code==='PGRST116')incomeData[tab]=[];
-      else if(error)throw error;
-      else incomeData[tab]=JSON.parse((rows&&rows.payload)||'[]');
-    }else{
-      const iUrl=localStorage.getItem('sb_url')||SB_URL;
-      const iKey=localStorage.getItem('sb_key')||SB_KEY;
-      const r=await fetch(`${iUrl}/rest/v1/checklist_data?employee=eq.${encodeURIComponent(empKey)}&select=payload`,{headers:{'apikey':iKey,'Authorization':`Bearer ${iKey}`}});
-      const data=await r.json();
-      if(Array.isArray(data)&&data[0])incomeData[tab]=JSON.parse(data[0].payload||'[]');
+    // 전체 rows 가져와서 클라이언트 필터링 (URL 인코딩 이슈 우회)
+    const r=await fetch(`${iUrl}/rest/v1/checklist_data?select=employee,payload`,{headers:{'apikey':iKey,'Authorization':`Bearer ${iKey}`}});
+    const allRows=await r.json();
+    if(dbg)dbg.textContent='응답: '+JSON.stringify(allRows).slice(0,100);
+    if(Array.isArray(allRows)){
+      const found=allRows.find(row=>row.employee===empKey);
+      if(found)incomeData[tab]=JSON.parse(found.payload||'[]');
       else incomeData[tab]=[];
+    }else{
+      if(dbg)dbg.style.color='#e53e3e';
+      incomeData[tab]=[];
     }
     setSync('ok','동기화 완료');
-  }catch(e){console.error('loadIncomeTab error:',e);setSync('err','불러오기 실패');}
+  }catch(e){
+    if(dbg){dbg.textContent='오류: '+e.message;dbg.style.color='#e53e3e';}
+    setSync('err','불러오기 실패');
+    incomeData[tab]=[];
+  }
   renderIncomeTab(tab);
 }
 function scheduleIncSave(tab){clearTimeout(incSaveTimer[tab]);incSaveTimer[tab]=setTimeout(()=>saveIncomeTab(tab),1500);}
@@ -562,6 +569,7 @@ function renderIncomeTab(tab){
       <tbody>${completed.map(r=>incBuildRow(r,tab,true)).join('')}</tbody></table></div>`:''}
     </div>`:'' ;
   document.getElementById('main-content').innerHTML=`<div class="inc-content">
+    <div id="inc-debug" style="font-size:11px;color:#888;background:#f9f9f7;padding:6px 10px;border-radius:6px;margin-bottom:8px;word-break:break-all">로딩 중...</div>
     <div class="inc-stats">
       <div class="inc-stat"><div class="snum">${total}</div><div class="slbl">전체 대상자</div></div>
       <div class="inc-stat"><div class="snum" style="color:#1D9E75">${done}</div><div class="slbl">신고 완료</div></div>

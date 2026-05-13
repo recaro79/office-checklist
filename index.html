@@ -538,10 +538,23 @@ function buildDeadlineSection(cl){
   const today=new Date();today.setHours(0,0,0,0);
   let badgeHTML='';
   if(deadline){const days=Math.ceil((deadline-today)/86400000);const cls=days<0?'over':days<=30?'warn':'ok';const daysTxt=days<0?`${Math.abs(days)}일 초과`:days===0?'오늘 마감':`D-${days}`;const dateTxt=deadline.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});badgeHTML=`<div class="deadline-badge"><span class="deadline-date">📅 신고마감: ${dateTxt}</span><span class="days-left ${cls}">${daysTxt}</span></div>`;}
-  return `<div class="deadline-section"><div class="deadline-row"><span class="dl-label">${label}</span><input type="date" class="date-inp" value="${cl.event_date||''}" onclick="event.stopPropagation()" onchange="saveDate('${cl.id}',this.value)" /></div>${badgeHTML}</div>`;
+  return `<div class="deadline-section"><div class="deadline-row"><span class="dl-label">${label}</span><input type="text" class="date-inp" value="${cl.event_date||''}" maxlength="10" placeholder="YYYYMMDD" onclick="event.stopPropagation()" oninput="handleDateType(this,'${cl.id}')" /></div>${badgeHTML}</div>`;
+
 }
-async function saveDate(cid,val){const cl=findCl(cid);if(!cl)return;cl.event_date=val;openCards={[cid]:true};renderSummaryAndContent();await apiPatch(cid,{event_date:val||null});setSync('ok','저장됨');}
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function handleDateType(el,cid){
+  const pos=el.selectionStart;
+  let raw=el.value.replace(/\D/g,'');
+  if(raw.length>8)raw=raw.slice(0,8);
+  let fmt=raw;
+  if(raw.length>4)fmt=raw.slice(0,4)+'-'+raw.slice(4);
+  if(raw.length>6)fmt=raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6);
+  el.value=fmt;
+  // 커서를 끝으로
+  const end=fmt.length;
+  el.setSelectionRange(end,end);
+  if(raw.length===8){saveDate(cid,fmt);}
+}
+async function saveDate(cid,val){const cl=findCl(cid);if(!cl)return;cl.event_date=val;openCards={[cid]:true};renderSummaryAndContent();await apiPatch(cid,{event_date:val||null});setSync('ok','저장됨');}function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 /* ═══ 소득세 탭 렌더링 ═══ */
 function incProg(r){return INC_SK.filter(k=>r[k]).length;}
@@ -556,22 +569,35 @@ function renderIncomeTab(tab){
   if(filter==='done')rows=active.filter(r=>incProg(r)===5);
   else if(filter==='progress')rows=active.filter(r=>{const p=incProg(r);return p>0&&p<5;});
   else if(filter==='none')rows=active.filter(r=>incProg(r)===0);
-  const tabLabel=tab==='종합소득세'?'소득유형':'신고유형';
-  const totalFee=data.filter(r=>!r.done).reduce((s,r)=>s+incParseFee(r.fee),0).toLocaleString();
-  const mainRows=rows.length?rows.map(r=>incBuildRow(r,tab,false)).join(''):`<tr><td colspan="13" class="inc-empty">대상자를 추가해 주세요</td></tr>`;
+  const isBunga=tab==='부가가치세';
+  const colCount=isBunga?12:13;
+  const mainRows=rows.length?rows.map(r=>incBuildRow(r,tab,false)).join(''):`<tr><td colspan="${colCount}" class="inc-empty">대상자를 추가해 주세요</td></tr>`;
   const doneOpen=incDoneOpen[tab];
+  const thRow=isBunga
+    ?`<th class="th-biz">상호</th><th class="th-name">성명 <span style="font-weight:400;color:#aaa">(선택)</span></th>`
+    :`<th class="th-name">성명</th><th class="th-biz">상호</th><th class="th-type">소득유형</th>`;
   const doneSec=completed.length?`<div class="inc-done-section">
     <div class="inc-done-hdr" onclick="toggleIncDone('${tab}')">
       <h3>✅ 완료된 신고</h3><span class="inc-done-count">${completed.length}건</span>
       <span class="inc-done-toggle">${doneOpen?'▲ 접기':'▼ 펼치기'}</span></div>
     ${doneOpen?`<div class="inc-done-tbl" id="inc-dtbl-${tab}"><table>
-      <thead><tr><th class="th-name">성명</th><th class="th-biz">상호</th><th class="th-type">${tabLabel}</th>
+      <thead><tr>${thRow}
       <th class="th-step">신고서<br>출력</th><th class="th-step">세액<br>계산</th><th class="th-step">서류<br>확인</th>
       <th class="th-step">납부서<br>전달</th><th class="th-step">홈택스<br>신고</th>
       <th class="th-taxamt">납부세액</th><th class="th-fee">수수료</th><th class="th-memo">메모</th>
       <th class="th-done">되돌리기</th><th class="th-del"></th></tr></thead>
       <tbody>${completed.map(r=>incBuildRow(r,tab,true)).join('')}</tbody></table></div>`:''}
     </div>`:'' ;
+  const toolbarHtml=isBunga
+    ?`<input type="text" id="ii-biz" placeholder="상호" maxlength="20" />
+       <input type="text" id="ii-name" placeholder="성명 (없으면 생략)" maxlength="15" />
+       <button class="btn-iadd" onclick="incAddRow('${tab}')">+ 추가</button>`
+    :`<input type="text" id="ii-name" placeholder="성명" maxlength="15" />
+       <input type="text" id="ii-biz" placeholder="상호 (없으면 생략)" maxlength="20" />
+       <div class="type-sel" id="type-sel-${tab}">
+         ${INC_ALL_T.map(t=>`<span class="type-chip" data-t="${t}" onclick="incPickType(this,'${tab}')">${t}</span>`).join('')}
+       </div>
+       <button class="btn-iadd" onclick="incAddRow('${tab}')">+ 추가</button>`;
   document.getElementById('main-content').innerHTML=`<div class="inc-content">
     <div id="inc-debug" style="font-size:11px;color:#888;background:#f9f9f7;padding:6px 10px;border-radius:6px;margin-bottom:8px;word-break:break-all">로딩 중...</div>
     <div class="inc-stats">
@@ -580,14 +606,7 @@ function renderIncomeTab(tab){
       <div class="inc-stat"><div class="snum" style="color:#378ADD">${ing}</div><div class="slbl">진행중</div></div>
       <div class="inc-stat"><div class="snum" style="color:#aaa">${none}</div><div class="slbl">미시작</div></div>
     </div>
-    <div class="inc-toolbar">
-      <input type="text" id="ii-name" placeholder="성명" maxlength="15" />
-      <input type="text" id="ii-biz" placeholder="상호 (없으면 생략)" maxlength="20" />
-      <div class="type-sel" id="type-sel-${tab}">
-        ${INC_ALL_T.map(t=>`<span class="type-chip" data-t="${t}" onclick="incPickType(this,'${tab}')">${t}</span>`).join('')}
-      </div>
-      <button class="btn-iadd" onclick="incAddRow('${tab}')">+ 추가</button>
-    </div>
+    <div class="inc-toolbar">${toolbarHtml}</div>
     <div class="inc-filter">
       <button class="inc-fbtn ${filter==='all'?'active':''}" onclick="setIncFilter('all','${tab}')">전체</button>
       <button class="inc-fbtn ${filter==='done'?'active':''}" onclick="setIncFilter('done','${tab}')">완료</button>
@@ -595,8 +614,7 @@ function renderIncomeTab(tab){
       <button class="inc-fbtn ${filter==='none'?'active':''}" onclick="setIncFilter('none','${tab}')">미시작</button>
     </div>
     <div class="inc-tbl-wrap" id="inc-tbl-${tab}">
-      <table><thead><tr>
-        <th class="th-name">성명</th><th class="th-biz">상호</th><th class="th-type">${tabLabel}</th>
+      <table><thead><tr>${thRow}
         <th class="th-step">신고서<br>출력</th><th class="th-step">세액<br>계산</th><th class="th-step">서류<br>확인</th>
         <th class="th-step">납부서<br>전달</th><th class="th-step">홈택스<br>신고</th>
         <th class="th-taxamt">납부세액</th><th class="th-fee">수수료</th><th class="th-memo">메모</th>
@@ -609,33 +627,36 @@ function renderIncomeTab(tab){
       <button class="inc-btn-sm red" onclick="incClearAll('${tab}')">전체 초기화</button>
     </div>${doneSec}</div>`;
   [...rows,...completed].forEach(row=>{
+    if(tab==='부가가치세')return;
     const pfx=row.done?'idbg-':'ibg-';
     const el=document.getElementById(pfx+row.id);
     if(el){const btn=el.querySelector('.inc-badge-add');if(btn)btn.onclick=e=>{e.stopPropagation();showIncPop(row.id,btn,tab,row.done);};}
   });
   const ni=document.getElementById('ii-name'),bi=document.getElementById('ii-biz');
-  if(ni)ni.onkeydown=e=>{if(e.key==='Enter')bi&&bi.focus();};
-  if(bi)bi.onkeydown=e=>{if(e.key==='Enter')incAddRow(tab);};
+  if(isBunga){
+    if(bi)bi.onkeydown=e=>{if(e.key==='Enter')ni&&ni.focus();};
+    if(ni)ni.onkeydown=e=>{if(e.key==='Enter')incAddRow(tab);};
+  }else{
+    if(ni)ni.onkeydown=e=>{if(e.key==='Enter')bi&&bi.focus();};
+    if(bi)bi.onkeydown=e=>{if(e.key==='Enter')incAddRow(tab);};
+  }
 }
 function incBuildRow(row,tab,isDone){
+  const isBunga=tab==='부가가치세';
   const pct=Math.round(incProg(row)/5*100);
+  const escS=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const cks=INC_SK.map(k=>`<td><input type="checkbox" ${row[k]?'checked':''} onchange="incToggle(${row.id},'${k}','${tab}')" /></td>`).join('');
+  const doneBtn=isDone?`<button class="btn-undone-inc" onclick="incMarkUndone(${row.id},'${tab}')">↩ 되돌리기</button>`:`<button class="btn-done-inc" onclick="incMarkDone(${row.id},'${tab}')">완료</button>`;
+  const nameCell=`<td class="td-name"><div class="inc-nwrap"><input class="inc-editable" style="font-weight:600" value="${escS(row.name)}" maxlength="15" onchange="incUpdField(${row.id},'name',this.value,'${tab}')" placeholder="${isBunga?'성명 (선택)':'성명'}" /><div class="inc-pbar"><div class="inc-pfill" id="ipf-${row.id}" style="width:${pct}%"></div></div></div></td>`;
+  const bizCell=`<td class="td-biz"><input class="inc-editable" value="${escS(row.biz)}" maxlength="20" onchange="incUpdField(${row.id},'biz',this.value,'${tab}')" placeholder="${isBunga?'상호':'상호'}" style="color:#718096;${isBunga?'font-weight:600;color:#1a202c':''}" /></td>`;
+  const pfx=isDone?'idbg-':'ibg-';
   const types=(row.types||[]).filter(Boolean);
   const bh=types.map(t=>{const s=ITS[t]||ITS['기타'];return`<span class="inc-badge" style="background:${s.bg};color:${s.fg}">${t}</span>`;}).join('')+'<span class="inc-badge-add">+</span>';
-  const cks=INC_SK.map(k=>`<td><input type="checkbox" ${row[k]?'checked':''} onchange="incToggle(${row.id},'${k}','${tab}')" /></td>`).join('');
-  const escS=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const pfx=isDone?'idbg-':'ibg-';
-  const doneBtn=isDone?`<button class="btn-undone-inc" onclick="incMarkUndone(${row.id},'${tab}')">↩ 되돌리기</button>`:`<button class="btn-done-inc" onclick="incMarkDone(${row.id},'${tab}')">완료</button>`;
-  return `<tr>
-    <td class="td-name"><div class="inc-nwrap"><input class="inc-editable" style="font-weight:600" value="${escS(row.name)}" maxlength="15" onchange="incUpdField(${row.id},'name',this.value,'${tab}')" placeholder="성명" /><div class="inc-pbar"><div class="inc-pfill" id="ipf-${row.id}" style="width:${pct}%"></div></div></div></td>
-    <td class="td-biz"><input class="inc-editable" value="${escS(row.biz)}" maxlength="20" onchange="incUpdField(${row.id},'biz',this.value,'${tab}')" placeholder="상호" style="color:#718096" /></td>
-    <td><div class="inc-badges" id="${pfx}${row.id}">${bh}</div></td>
-    ${cks}
-    <td class="td-taxamt"><input type="text" value="${escS(row.taxAmt)}" placeholder="0" maxlength="15" onchange="incUpdField(${row.id},'taxAmt',this.value,'${tab}')" /></td>
-    <td class="td-fee"><input type="text" value="${escS(row.fee)}" placeholder="0" maxlength="12" onchange="incUpdField(${row.id},'fee',this.value,'${tab}')" /></td>
-    <td class="td-memo"><input type="text" value="${escS(row.memo)}" placeholder="메모..." maxlength="50" onchange="incUpdField(${row.id},'memo',this.value,'${tab}')" /></td>
-    <td>${doneBtn}</td>
-    <td><button class="btn-idel" onclick="incDelRow(${row.id},'${tab}')">✕</button></td>
-  </tr>`;
+  const typeCell=`<td><div class="inc-badges" id="${pfx}${row.id}">${bh}</div></td>`;
+  const firstCols=isBunga
+    ?`${bizCell}${nameCell}`
+    :`${nameCell}${bizCell}${typeCell}`;
+  return `<tr>${firstCols}${cks}<td class="td-taxamt"><input type="text" value="${escS(row.taxAmt)}" placeholder="0" maxlength="15" onchange="incUpdField(${row.id},'taxAmt',this.value,'${tab}')" /></td><td class="td-fee"><input type="text" value="${escS(row.fee)}" placeholder="0" maxlength="12" onchange="incUpdField(${row.id},'fee',this.value,'${tab}')" /></td><td class="td-memo"><input type="text" value="${escS(row.memo)}" placeholder="메모..." maxlength="50" onchange="incUpdField(${row.id},'memo',this.value,'${tab}')" /></td><td>${doneBtn}</td><td><button class="btn-idel" onclick="incDelRow(${row.id},'${tab}')">✕</button></td></tr>`;
 }
 function incPickType(el,tab){
   const t=el.dataset.t,s=ITS[t]||ITS['기타'],i=incSelTypes.indexOf(t);
@@ -643,13 +664,19 @@ function incPickType(el,tab){
   else{incSelTypes.push(t);el.classList.add('sel');el.style.background=s.bg;el.style.color=s.fg;}
 }
 function incAddRow(tab){
+  const isBunga=tab==='부가가치세';
   const n=document.getElementById('ii-name').value.trim(),b=document.getElementById('ii-biz').value.trim();
-  if(!n){document.getElementById('ii-name').focus();return;}
-  if(!incSelTypes.length){alert('소득유형을 하나 이상 선택해 주세요.');return;}
+  if(isBunga){
+    if(!b){document.getElementById('ii-biz').focus();return;}
+  }else{
+    if(!n){document.getElementById('ii-name').focus();return;}
+    if(!incSelTypes.length){alert('소득유형을 하나 이상 선택해 주세요.');return;}
+  }
   if(!incomeData[tab])incomeData[tab]=[];
-  incomeData[tab].push({id:Date.now(),name:n,biz:b,types:[...incSelTypes],print:false,tax:false,docs:false,payment:false,hometax:false,taxAmt:'',fee:'',memo:'',done:false});
+  incomeData[tab].push({id:Date.now(),name:n,biz:b,types:isBunga?[]:[...incSelTypes],print:false,tax:false,docs:false,payment:false,hometax:false,taxAmt:'',fee:'',memo:'',done:false});
   document.getElementById('ii-name').value='';document.getElementById('ii-biz').value='';
-  incSelTypes=[];scheduleIncSave(tab);renderIncomeTab(tab);document.getElementById('ii-name').focus();
+  incSelTypes=[];scheduleIncSave(tab);renderIncomeTab(tab);
+  document.getElementById(isBunga?'ii-biz':'ii-name').focus();
 }
 function incToggle(id,k,tab){const r=(incomeData[tab]||[]).find(d=>d.id===id);if(!r)return;r[k]=!r[k];scheduleIncSave(tab);const pf=document.getElementById('ipf-'+id);if(pf)pf.style.width=Math.round(incProg(r)/5*100)+'%';}
 function incMarkDone(id,tab){const r=(incomeData[tab]||[]).find(d=>d.id===id);if(!r)return;r.done=true;scheduleIncSave(tab);renderIncomeTab(tab);}

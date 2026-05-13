@@ -538,21 +538,32 @@ function buildDeadlineSection(cl){
   const today=new Date();today.setHours(0,0,0,0);
   let badgeHTML='';
   if(deadline){const days=Math.ceil((deadline-today)/86400000);const cls=days<0?'over':days<=30?'warn':'ok';const daysTxt=days<0?`${Math.abs(days)}일 초과`:days===0?'오늘 마감':`D-${days}`;const dateTxt=deadline.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});badgeHTML=`<div class="deadline-badge"><span class="deadline-date">📅 신고마감: ${dateTxt}</span><span class="days-left ${cls}">${daysTxt}</span></div>`;}
-  return `<div class="deadline-section"><div class="deadline-row"><span class="dl-label">${label}</span><input type="text" class="date-inp" value="${cl.event_date||''}" maxlength="10" placeholder="YYYYMMDD" onclick="event.stopPropagation()" oninput="handleDateType(this,'${cl.id}')" /></div>${badgeHTML}</div>`;
+  return `<div class="deadline-section"><div class="deadline-row"><span class="dl-label">${label}</span>
+    <div style="display:flex;align-items:center;gap:4px;position:relative">
+      <input type="text" class="date-inp" id="dtxt-${cl.id}" value="${cl.event_date||''}" maxlength="10" placeholder="YYYYMMDD"
+        onclick="event.stopPropagation()" oninput="handleDateType(this,'${cl.id}')" />
+      <input type="date" id="dpick-${cl.id}" value="${cl.event_date||''}"
+        style="position:absolute;opacity:0;width:28px;right:0;top:0;bottom:0;cursor:pointer"
+        onclick="event.stopPropagation()" onchange="pickDate('${cl.id}',this.value)" />
+      <span style="font-size:16px;cursor:pointer;color:#718096" onclick="event.stopPropagation();document.getElementById('dpick-${cl.id}').showPicker&&document.getElementById('dpick-${cl.id}').showPicker()">📅</span>
+    </div>
+    </div>${badgeHTML}</div>`;
 
 }
 function handleDateType(el,cid){
-  const pos=el.selectionStart;
   let raw=el.value.replace(/\D/g,'');
   if(raw.length>8)raw=raw.slice(0,8);
   let fmt=raw;
   if(raw.length>4)fmt=raw.slice(0,4)+'-'+raw.slice(4);
   if(raw.length>6)fmt=raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6);
   el.value=fmt;
-  // 커서를 끝으로
-  const end=fmt.length;
-  el.setSelectionRange(end,end);
+  el.setSelectionRange(fmt.length,fmt.length);
   if(raw.length===8){saveDate(cid,fmt);}
+}
+function pickDate(cid,val){
+  const txt=document.getElementById('dtxt-'+cid);
+  if(txt)txt.value=val;
+  saveDate(cid,val);
 }
 async function saveDate(cid,val){const cl=findCl(cid);if(!cl)return;cl.event_date=val;openCards={[cid]:true};renderSummaryAndContent();await apiPatch(cid,{event_date:val||null});setSync('ok','저장됨');}function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
@@ -571,6 +582,7 @@ function renderIncomeTab(tab){
   else if(filter==='none')rows=active.filter(r=>incProg(r)===0);
   const isBunga=tab==='부가가치세';
   const colCount=isBunga?12:13;
+  const totalFee=data.filter(r=>!r.done).reduce((s,r)=>s+incParseFee(r.fee),0).toLocaleString();
   const mainRows=rows.length?rows.map(r=>incBuildRow(r,tab,false)).join(''):`<tr><td colspan="${colCount}" class="inc-empty">대상자를 추가해 주세요</td></tr>`;
   const doneOpen=incDoneOpen[tab];
   const thRow=isBunga

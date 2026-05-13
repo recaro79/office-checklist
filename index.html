@@ -350,10 +350,13 @@ async function apiPatch(id,fields){
 async function apiDelete(id){
   await fetch(`${SB_URL}/rest/v1/office_checklist?id=eq.${id}`,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
 }
+function getIncUrl(){return localStorage.getItem('sb_url')||localStorage.getItem('oc2_url')||SB_URL;}
+function getIncKey(){return localStorage.getItem('sb_key')||localStorage.getItem('oc2_key')||SB_KEY;}
 async function loadIncomeTab(tab){
+  const iUrl=getIncUrl(),iKey=getIncKey();
   const key=EMP_NAME+'_'+tab;
   try{
-    const r=await fetch(`${SB_URL}/rest/v1/checklist_data?employee=eq.${encodeURIComponent(key)}&select=payload`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+    const r=await fetch(`${iUrl}/rest/v1/checklist_data?employee=eq.${encodeURIComponent(key)}&select=payload`,{headers:{'apikey':iKey,'Authorization':`Bearer ${iKey}`}});
     const rows=await r.json();
     if(rows&&rows[0])incomeData[tab]=JSON.parse(rows[0].payload||'[]');
     else incomeData[tab]=[];
@@ -363,10 +366,11 @@ async function loadIncomeTab(tab){
 }
 function scheduleIncSave(tab){clearTimeout(incSaveTimer[tab]);incSaveTimer[tab]=setTimeout(()=>saveIncomeTab(tab),1500);}
 async function saveIncomeTab(tab){
+  const iUrl=getIncUrl(),iKey=getIncKey();
   const key=EMP_NAME+'_'+tab;
   const payload=JSON.stringify(incomeData[tab]);
   try{
-    await fetch(`${SB_URL}/rest/v1/checklist_data`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},body:JSON.stringify({employee:key,payload,updated_at:new Date().toISOString()})});
+    await fetch(`${iUrl}/rest/v1/checklist_data`,{method:'POST',headers:{'apikey':iKey,'Authorization':`Bearer ${iKey}`,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},body:JSON.stringify({employee:key,payload,updated_at:new Date().toISOString()})});
     setSync('ok','저장됨');
   }catch(e){setSync('err','저장 실패');}
 }

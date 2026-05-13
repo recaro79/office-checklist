@@ -173,9 +173,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans
 .inc-tbl-wrap input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:#1D9E75}
 .inc-tbl-wrap td.td-taxamt input,.inc-tbl-wrap td.td-fee input{width:100%;background:transparent;border:none;font-size:12px;color:#718096;outline:none;font-family:inherit;text-align:right}
 .inc-tbl-wrap td.td-taxamt input:focus,.inc-tbl-wrap td.td-fee input:focus{color:#1a202c}
-.inc-tbl-wrap td.td-memo input{width:100%;background:transparent;border:none;font-size:12px;color:#555;outline:none;font-family:inherit;font-weight:500}
+.inc-tbl-wrap td.td-memo input{width:100%;background:transparent;border:none;font-size:12px;color:#555;outline:none;font-family:inherit;font-weight:500;cursor:pointer}
 .inc-tbl-wrap td.td-memo input::placeholder{color:#ccc;font-weight:400}
 .inc-tbl-wrap td.td-memo input:focus{color:#1a202c;font-weight:600}
+/* 장부유형 select */
+.book-sel{font-size:11px;padding:3px 5px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#4a5568;cursor:pointer;font-family:inherit;width:100%;outline:none}
+.book-sel:focus{border-color:#1D9E75}
+/* 메모 팝업 */
+#memo-popup{display:none;position:fixed;z-index:1000;background:#fff;border:1px solid #ddd;border-radius:12px;padding:12px;box-shadow:0 8px 32px rgba(0,0,0,0.15);min-width:260px;max-width:380px}
+#memo-popup textarea{width:100%;height:120px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;color:#1a202c;line-height:1.6}
+#memo-popup textarea:focus{border-color:#1D9E75}
+#memo-popup-hint{font-size:11px;color:#a0aec0;margin-top:6px;text-align:right}
+#memo-popup-title{font-size:12px;font-weight:600;color:#4a5568;margin-bottom:7px}
 .btn-idel{background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:2px;line-height:1}
 .btn-idel:hover{color:#e24b4a}
 .btn-done-inc{font-size:11px;padding:3px 9px;border-radius:8px;border:1.5px solid #1D9E75;color:#1D9E75;background:white;cursor:pointer;white-space:nowrap;font-family:inherit}
@@ -210,6 +219,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans
 </style>
 </head>
 <body>
+
+<div id="memo-popup">
+  <div id="memo-popup-title">📝 메모</div>
+  <textarea id="memo-popup-ta" placeholder="메모를 입력하세요..."></textarea>
+  <div id="memo-popup-hint">클릭 밖 또는 Esc로 닫기 · 자동저장</div>
+</div>
 
 <div id="setup-screen">
   <div class="setup-card">
@@ -465,7 +480,8 @@ function buildCard(cl){
       <span style="font-size:15px">${icon}</span>
       <div class="client-name">${esc(cl.client_name)}</div>
       <input class="header-memo" placeholder="메모..." value="${esc(cl.memo||'')}"
-        onclick="event.stopPropagation()" onblur="saveMemo('${cl.id}',this.value)" />
+        onclick="event.stopPropagation();openMemoPopup(this,'${esc(cl.client_name)}','${esc(cl.memo||'')}',{type:'card',id:'${cl.id}'})"
+        data-memo-id="${cl.id}" data-memo-open="1" readonly />
       <div class="progress-info"><div class="progress-text">${d}/${tot}</div>
         <div class="progress-bar"><div class="progress-fill ${fillCls}" style="width:${pct}%"></div></div></div>
       <button class="btn-complete ${isComp?'is-done':''}" onclick="event.stopPropagation();toggleComplete('${cl.id}')">
@@ -567,7 +583,58 @@ function pickDate(cid,val){
 }
 async function saveDate(cid,val){const cl=findCl(cid);if(!cl)return;cl.event_date=val;openCards={[cid]:true};renderSummaryAndContent();await apiPatch(cid,{event_date:val||null});setSync('ok','저장됨');}function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
-/* ═══ 소득세 탭 렌더링 ═══ */
+/* ═══ 메모 팝업 ═══ */
+let _memoCtx=null; // {type:'inc'|'card', id, tab}
+function openMemoPopup(el, title, value, ctx){
+  _memoCtx=ctx;
+  const pop=document.getElementById('memo-popup');
+  const ta=document.getElementById('memo-popup-ta');
+  document.getElementById('memo-popup-title').textContent='📝 '+title+' 메모';
+  ta.value=value||'';
+  pop.style.display='block';
+  // 위치 계산
+  const rect=el.getBoundingClientRect();
+  const popW=360, popH=190;
+  let left=rect.left, top=rect.bottom+6;
+  if(left+popW>window.innerWidth)left=window.innerWidth-popW-10;
+  if(top+popH>window.innerHeight)top=rect.top-popH-6;
+  pop.style.left=Math.max(6,left)+'px';
+  pop.style.top=Math.max(6,top)+'px';
+  setTimeout(()=>{ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);},50);
+}
+function closeMemoPopup(){
+  const pop=document.getElementById('memo-popup');
+  if(pop.style.display==='none')return;
+  const val=document.getElementById('memo-popup-ta').value;
+  if(_memoCtx){
+    if(_memoCtx.type==='inc'){
+      incUpdField(_memoCtx.id,'memo',val,_memoCtx.tab);
+      // 화면의 해당 input도 업데이트
+      const inputs=document.querySelectorAll(`[data-memo-id="${_memoCtx.id}"]`);
+      inputs.forEach(i=>i.value=val);
+    }else if(_memoCtx.type==='card'){
+      saveMemo(_memoCtx.id,val);
+      const inputs=document.querySelectorAll(`[data-memo-id="${_memoCtx.id}"]`);
+      inputs.forEach(i=>i.value=val);
+    }
+  }
+  pop.style.display='none';
+  _memoCtx=null;
+}
+document.addEventListener('mousedown',function(e){
+  const pop=document.getElementById('memo-popup');
+  if(pop&&pop.style.display!=='none'&&!pop.contains(e.target)&&!e.target.closest('[data-memo-open]'))closeMemoPopup();
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')closeMemoPopup();
+});
+/* 장부유형 */
+const BOOK_TYPES=['','복식','간편','기준','단순','모두채움'];
+function incUpdBookType(id,val,tab){
+  const r=(incomeData[tab]||[]).find(d=>d.id===id);if(!r)return;
+  r.bookType=val;scheduleIncSave(tab);
+}
+
 function incProg(r){return INC_SK.filter(k=>r[k]).length;}
 function incParseFee(v){const n=parseInt((v||'').replace(/[^0-9]/g,''),10);return isNaN(n)?0:n;}
 function renderIncomeTab(tab){
@@ -587,7 +654,7 @@ function renderIncomeTab(tab){
   const doneOpen=incDoneOpen[tab];
   const thRow=isBunga
     ?`<th class="th-biz">상호</th><th class="th-name">성명 <span style="font-weight:400;color:#aaa">(선택)</span></th>`
-    :`<th class="th-name">성명</th><th class="th-biz">상호</th><th class="th-type">소득유형</th>`;
+    :`<th class="th-name">성명</th><th class="th-biz">상호</th><th class="th-type">소득유형</th><th style="width:76px">장부유형</th>`;
   const doneSec=completed.length?`<div class="inc-done-section">
     <div class="inc-done-hdr" onclick="toggleIncDone('${tab}')">
       <h3>✅ 완료된 신고</h3><span class="inc-done-count">${completed.length}건</span>
@@ -664,11 +731,15 @@ function incBuildRow(row,tab,isDone){
   const pfx=isDone?'idbg-':'ibg-';
   const types=(row.types||[]).filter(Boolean);
   const bh=types.map(t=>{const s=ITS[t]||ITS['기타'];return`<span class="inc-badge" style="background:${s.bg};color:${s.fg}">${t}</span>`;}).join('')+'<span class="inc-badge-add">+</span>';
-  const typeCell=`<td><div class="inc-badges" id="${pfx}${row.id}">${bh}</div></td>`;
+  const typeCell=`<td><div class="inc-badges" id="${pfx}${row.id}">${bh}</div></td>
+    <td><select class="book-sel" onchange="incUpdBookType(${row.id},this.value,'${tab}')">
+      ${BOOK_TYPES.map(t=>`<option value="${t}" ${(row.bookType||'')=== t?'selected':''}>${t||'선택'}</option>`).join('')}
+    </select></td>`;
   const firstCols=isBunga
     ?`${bizCell}${nameCell}`
     :`${nameCell}${bizCell}${typeCell}`;
-  return `<tr>${firstCols}${cks}<td class="td-taxamt"><input type="text" value="${escS(row.taxAmt)}" placeholder="0" maxlength="15" onchange="incUpdField(${row.id},'taxAmt',this.value,'${tab}')" /></td><td class="td-fee"><input type="text" value="${escS(row.fee)}" placeholder="0" maxlength="12" onchange="incUpdField(${row.id},'fee',this.value,'${tab}')" /></td><td class="td-memo"><input type="text" value="${escS(row.memo)}" placeholder="메모..." maxlength="50" onchange="incUpdField(${row.id},'memo',this.value,'${tab}')" /></td><td>${doneBtn}</td><td><button class="btn-idel" onclick="incDelRow(${row.id},'${tab}')">✕</button></td></tr>`;
+  const memoPreview=(row.memo||'').slice(0,20)+((row.memo||'').length>20?'…':'');
+  return `<tr>${firstCols}${cks}<td class="td-taxamt"><input type="text" value="${escS(row.taxAmt)}" placeholder="0" maxlength="15" onchange="incUpdField(${row.id},'taxAmt',this.value,'${tab}')" /></td><td class="td-fee"><input type="text" value="${escS(row.fee)}" placeholder="0" maxlength="12" onchange="incUpdField(${row.id},'fee',this.value,'${tab}')" /></td><td class="td-memo"><input type="text" data-memo-id="${row.id}" value="${escS(row.memo)}" placeholder="메모..." readonly data-memo-open="1" onclick="openMemoPopup(this,'${escS(row.name||row.biz)}','${escS(row.memo)}',{type:'inc',id:${row.id},tab:'${tab}'})" /></td><td>${doneBtn}</td><td><button class="btn-idel" onclick="incDelRow(${row.id},'${tab}')">✕</button></td></tr>`;
 }
 function incPickType(el,tab){
   const t=el.dataset.t,s=ITS[t]||ITS['기타'],i=incSelTypes.indexOf(t);

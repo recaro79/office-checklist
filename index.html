@@ -427,7 +427,11 @@ function renderTabs(){
 }
 function sw(cat){
   activeTab=cat;editingTask=null;insertingAt=null;
-  if(INCOME_TABS.includes(cat)){document.getElementById('main-content').innerHTML='';loadIncomeTab(cat);}
+  if(INCOME_TABS.includes(cat)){
+    incomeData[cat]=incomeData[cat]||[];
+    renderIncomeTab(cat);
+    loadIncomeTab(cat);
+  }
   else renderSummaryAndContent();
   renderTabs();
 }

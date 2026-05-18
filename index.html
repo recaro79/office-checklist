@@ -60,6 +60,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans
 .client-header:hover{background:#f7fafc}
 .client-name{font-size:13px;font-weight:600;color:#2d3748;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .comp-card .client-name{color:#6b7280}
+.client-name-inp{font-size:13px;font-weight:600;color:#2d3748;flex:1;min-width:0;border:none;outline:none;background:transparent;font-family:inherit;padding:0;cursor:text}
+.client-name-inp:hover{background:#f0f4f8;border-radius:4px;padding:0 4px}
+.client-name-inp:focus{background:#f0f4f8;border-radius:4px;padding:0 4px;outline:1px solid #5a67d8}
 .progress-info{text-align:right;flex-shrink:0}
 .progress-text{font-size:10px;color:#a0aec0;margin-bottom:2px}
 .progress-bar{width:60px;height:4px;background:#e2e8f0;border-radius:2px;overflow:hidden}
@@ -294,6 +297,22 @@ let incDoneOpen={'종합소득세':true,'부가가치세':true};
 const ITS={근로:{bg:'#E1F5EE',fg:'#0F6E56'},사업:{bg:'#E6F1FB',fg:'#185FA5'},종합:{bg:'#FAECE7',fg:'#993C1D'},금융:{bg:'#EEEDFE',fg:'#534AB7'},연금:{bg:'#FAEEDA',fg:'#854F0B'},기타:{bg:'#F1EFE8',fg:'#5F5E5A'}};
 const INC_SK=['print','tax','docs','payment','hometax'];
 const INC_ALL_T=['근로','사업','종합','금융','연금','기타'];
+const INC_COLS={
+  '종합소득세':[
+    {k:'print',  h:'안내문<br>출력'},
+    {k:'tax',    h:'세액안내'},
+    {k:'docs',   h:'신고서<br>작성'},
+    {k:'payment',h:'홈택스<br>신고'},
+    {k:'hometax',h:'납부서<br>전달'}
+  ],
+  '부가가치세':[
+    {k:'print',  h:'안내문<br>출력'},
+    {k:'docs',   h:'서류확인'},
+    {k:'tax',    h:'세액계산'},
+    {k:'hometax',h:'홈택스<br>신고'},
+    {k:'payment',h:'납부서<br>전달'}
+  ]
+};
 
 window.onload=function(){
   SB_URL=localStorage.getItem('oc2_url')||localStorage.getItem('sb_url')||'';
@@ -478,7 +497,9 @@ function buildCard(cl){
   let h=`<div class="client-card ${isComp?'comp-card':''}" id="card-${cl.id}">
     <div class="client-header" onclick="tog('${cl.id}')">
       <span style="font-size:15px">${icon}</span>
-      <div class="client-name">${esc(cl.client_name)}</div>
+      <input class="client-name-inp ${isComp?'':'client-name'}" value="${esc(cl.client_name)}"
+        onclick="event.stopPropagation()" onblur="saveClientName('${cl.id}',this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()" title="클릭하여 수정" />
       <input class="header-memo" placeholder="메모..." value="${esc(cl.memo||'')}"
         onclick="event.stopPropagation();openMemoPopup(this,'${esc(cl.client_name)}','${esc(cl.memo||'')}',{type:'card',id:'${cl.id}'})"
         data-memo-id="${cl.id}" data-memo-open="1" readonly />
@@ -534,6 +555,12 @@ async function delTask(cid,idx){const cl=findCl(cid);if(!cl)return;cl.tasks.spli
 function startIns(cid,idx){insertingAt={cid,idx};editingTask=null;openCards={[cid]:true};renderSummaryAndContent();}
 function cancelIns(){insertingAt=null;renderSummaryAndContent();}
 async function saveIns(cid,idx){const el=document.getElementById(`ins-inp-${cid}-${idx}`);if(!el)return;const v=el.value.trim();if(!v){el.focus();return;}const cl=findCl(cid);if(!cl)return;cl.tasks.splice(idx,0,{text:v,done:false});insertingAt=null;openCards={[cid]:true};renderSummaryAndContent();await apiPatch(cid,{tasks:cl.tasks});setSync('ok','저장됨');}
+async function saveClientName(cid,val){
+  const v=val.trim();if(!v)return;
+  const cl=findCl(cid);if(!cl||cl.client_name===v)return;
+  cl.client_name=v;
+  await apiPatch(cid,{client_name:v});setSync('ok','저장됨');
+}
 async function saveMemo(cid,val){const cl=findCl(cid);if(!cl)return;cl.memo=val;await apiPatch(cid,{memo:val});setSync('ok','저장됨');}
 async function toggleComplete(cid){
   const cl=findCl(cid);if(!cl)return;
@@ -652,6 +679,8 @@ function renderIncomeTab(tab){
   const totalFee=data.filter(r=>!r.done).reduce((s,r)=>s+incParseFee(r.fee),0).toLocaleString();
   const mainRows=rows.length?rows.map(r=>incBuildRow(r,tab,false)).join(''):`<tr><td colspan="${colCount}" class="inc-empty">대상자를 추가해 주세요</td></tr>`;
   const doneOpen=incDoneOpen[tab];
+  const cols=INC_COLS[tab]||INC_COLS['종합소득세'];
+  const stepHeaders=cols.map(c=>`<th class="th-step">${c.h}</th>`).join('');
   const thRow=isBunga
     ?`<th class="th-biz">상호</th><th class="th-name">성명 <span style="font-weight:400;color:#aaa">(선택)</span></th>`
     :`<th class="th-name">성명</th><th class="th-biz">상호</th><th class="th-type">소득유형</th><th style="width:76px">장부유형</th>`;
@@ -663,7 +692,7 @@ function renderIncomeTab(tab){
       <thead><tr>${thRow}
       <th class="th-step">신고서<br>출력</th><th class="th-step">세액<br>계산</th><th class="th-step">서류<br>확인</th>
       <th class="th-step">납부서<br>전달</th><th class="th-step">홈택스<br>신고</th>
-      <th class="th-taxamt">납부세액</th><th class="th-fee">수수료</th><th class="th-memo">메모</th>
+      <th class="th-taxamt">납부세액</th><th class="th-fee">수수료</th><th style="width:52px">입금</th><th class="th-memo">메모</th>
       <th class="th-done">되돌리기</th><th class="th-del"></th></tr></thead>
       <tbody>${completed.map(r=>incBuildRow(r,tab,true)).join('')}</tbody></table></div>`:''}
     </div>`:'' ;
@@ -694,9 +723,8 @@ function renderIncomeTab(tab){
     </div>
     <div class="inc-tbl-wrap" id="inc-tbl-${tab}">
       <table><thead><tr>${thRow}
-        <th class="th-step">신고서<br>출력</th><th class="th-step">세액<br>계산</th><th class="th-step">서류<br>확인</th>
-        <th class="th-step">납부서<br>전달</th><th class="th-step">홈택스<br>신고</th>
-        <th class="th-taxamt">납부세액</th><th class="th-fee">수수료</th><th class="th-memo">메모</th>
+        ${stepHeaders}
+        <th class="th-taxamt">납부세액</th><th class="th-fee">수수료</th><th style="width:52px">입금</th><th class="th-memo">메모</th>
         <th class="th-done">완료</th><th class="th-del"></th>
       </tr></thead><tbody>${mainRows}</tbody></table>
     </div>
@@ -724,7 +752,8 @@ function incBuildRow(row,tab,isDone){
   const isBunga=tab==='부가가치세';
   const pct=Math.round(incProg(row)/5*100);
   const escS=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const cks=INC_SK.map(k=>`<td><input type="checkbox" ${row[k]?'checked':''} onchange="incToggle(${row.id},'${k}','${tab}')" /></td>`).join('');
+  const cols=INC_COLS[tab]||INC_COLS['종합소득세'];
+  const cks=cols.map(c=>`<td><input type="checkbox" ${row[c.k]?'checked':''} onchange="incToggle(${row.id},'${c.k}','${tab}')" /></td>`).join('');
   const doneBtn=isDone?`<button class="btn-undone-inc" onclick="incMarkUndone(${row.id},'${tab}')">↩ 되돌리기</button>`:`<button class="btn-done-inc" onclick="incMarkDone(${row.id},'${tab}')">완료</button>`;
   const nameCell=`<td class="td-name"><div class="inc-nwrap"><input class="inc-editable" style="font-weight:600" value="${escS(row.name)}" maxlength="15" onchange="incUpdField(${row.id},'name',this.value,'${tab}')" placeholder="${isBunga?'성명 (선택)':'성명'}" /><div class="inc-pbar"><div class="inc-pfill" id="ipf-${row.id}" style="width:${pct}%"></div></div></div></td>`;
   const bizCell=`<td class="td-biz"><input class="inc-editable" value="${escS(row.biz)}" maxlength="20" onchange="incUpdField(${row.id},'biz',this.value,'${tab}')" placeholder="${isBunga?'상호':'상호'}" style="color:#718096;${isBunga?'font-weight:600;color:#1a202c':''}" /></td>`;
@@ -739,7 +768,8 @@ function incBuildRow(row,tab,isDone){
     ?`${bizCell}${nameCell}`
     :`${nameCell}${bizCell}${typeCell}`;
   const memoPreview=(row.memo||'').slice(0,20)+((row.memo||'').length>20?'…':'');
-  return `<tr>${firstCols}${cks}<td class="td-taxamt"><input type="text" value="${escS(row.taxAmt)}" placeholder="0" maxlength="15" onchange="incUpdField(${row.id},'taxAmt',this.value,'${tab}')" /></td><td class="td-fee"><input type="text" value="${escS(row.fee)}" placeholder="0" maxlength="12" onchange="incUpdField(${row.id},'fee',this.value,'${tab}')" /></td><td class="td-memo"><input type="text" data-memo-id="${row.id}" value="${escS(row.memo)}" placeholder="메모..." readonly data-memo-open="1" onclick="openMemoPopup(this,'${escS(row.name||row.biz)}','${escS(row.memo)}',{type:'inc',id:${row.id},tab:'${tab}'})" /></td><td>${doneBtn}</td><td><button class="btn-idel" onclick="incDelRow(${row.id},'${tab}')">✕</button></td></tr>`;
+  const paidCell=`<td style="text-align:center"><input type="checkbox" ${row.paid?'checked':''} style="width:16px;height:16px;accent-color:#1D9E75;cursor:pointer" onchange="incUpdField(${row.id},'paid',this.checked,'${tab}')" /></td>`;
+  return `<tr>${firstCols}${cks}<td class="td-taxamt"><input type="text" value="${escS(row.taxAmt)}" placeholder="0" maxlength="15" onchange="incUpdField(${row.id},'taxAmt',this.value,'${tab}')" /></td><td class="td-fee"><input type="text" value="${escS(row.fee)}" placeholder="0" maxlength="12" onchange="incUpdField(${row.id},'fee',this.value,'${tab}')" /></td>${paidCell}<td class="td-memo"><input type="text" data-memo-id="${row.id}" value="${escS(row.memo)}" placeholder="메모..." readonly data-memo-open="1" onclick="openMemoPopup(this,'${escS(row.name||row.biz)}','${escS(row.memo)}',{type:'inc',id:${row.id},tab:'${tab}'})" /></td><td>${doneBtn}</td><td><button class="btn-idel" onclick="incDelRow(${row.id},'${tab}')">✕</button></td></tr>`;
 }
 function incPickType(el,tab){
   const t=el.dataset.t,s=ITS[t]||ITS['기타'],i=incSelTypes.indexOf(t);
@@ -756,7 +786,7 @@ function incAddRow(tab){
     if(!incSelTypes.length){alert('소득유형을 하나 이상 선택해 주세요.');return;}
   }
   if(!incomeData[tab])incomeData[tab]=[];
-  incomeData[tab].push({id:Date.now(),name:n,biz:b,types:isBunga?[]:[...incSelTypes],print:false,tax:false,docs:false,payment:false,hometax:false,taxAmt:'',fee:'',memo:'',done:false});
+  incomeData[tab].push({id:Date.now(),name:n,biz:b,types:isBunga?[]:[...incSelTypes],print:false,tax:false,docs:false,payment:false,hometax:false,taxAmt:'',fee:'',paid:false,memo:'',done:false,bookType:''});
   document.getElementById('ii-name').value='';document.getElementById('ii-biz').value='';
   incSelTypes=[];scheduleIncSave(tab);renderIncomeTab(tab);
   document.getElementById(isBunga?'ii-biz':'ii-name').focus();

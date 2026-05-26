@@ -526,12 +526,29 @@ function buildCard(cl){
   const tasks=cl.tasks||[],d=tasks.filter(t=>t.done).length,tot=tasks.length;
   const pct=tot?Math.round(d/tot*100):0,allDone=tot>0&&d===tot,isComp=cl.completed,isOpen=!!openCards[cl.id];
   const fillCls=isComp?'pf-comp':(allDone?'pf-done':''),icon=isComp?'✅':(allDone?'🟢':'📂');
+  // 헤더용 D-day 뱃지 계산
+  const deadline=calcDeadline(cl.event_date,cl.category);
+  const today=new Date();today.setHours(0,0,0,0);
+  let headerDday='';
+  if(deadline){
+    const days=Math.ceil((deadline-today)/86400000);
+    const cls=days<0?'over':days<=30?'warn':'ok';
+    const daysTxt=days<0?`${Math.abs(days)}일초과`:days===0?'오늘':(`D-${days}`);
+    headerDday=`<span class="days-left ${cls}" style="font-size:10px;padding:1px 7px">${daysTxt}</span>`;
+  }
   let h=`<div class="client-card ${isComp?'comp-card':''}" id="card-${cl.id}">
     <div class="client-header" onclick="tog('${cl.id}')">
       <span style="font-size:15px">${icon}</span>
-      <input class="client-name-inp ${isComp?'':'client-name'}" value="${esc(cl.client_name)}"
-        onclick="event.stopPropagation()" onblur="saveClientName('${cl.id}',this.value)"
-        onkeydown="if(event.key==='Enter')this.blur()" title="클릭하여 수정" />
+      <div style="flex:1;min-width:0;display:flex;align-items:center;gap:5px">
+        <span id="cname-txt-${cl.id}" class="${isComp?'':'client-name'}" style="font-size:13px;font-weight:600;color:${isComp?'#6b7280':'#2d3748'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${esc(cl.client_name)}</span>
+        ${headerDday}
+        <button class="ic" style="font-size:12px;padding:1px 4px;flex-shrink:0" title="이름 수정"
+          onclick="event.stopPropagation();startEditName('${cl.id}')">✏️</button>
+        <input id="cname-inp-${cl.id}" style="display:none;font-size:13px;font-weight:600;color:#2d3748;border:1.5px solid #5a67d8;border-radius:5px;padding:2px 6px;font-family:inherit;outline:none;width:110px"
+          onclick="event.stopPropagation()"
+          onblur="finishEditName('${cl.id}',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){cancelEditName('${cl.id}')}" />
+      </div>
       <input class="header-memo" placeholder="메모..." value="${esc(cl.memo||'')}"
         onclick="event.stopPropagation();openMemoPopup(this,'${esc(cl.client_name)}','${esc(cl.memo||'')}',{type:'card',id:'${cl.id}'})"
         data-memo-id="${cl.id}" data-memo-open="1" readonly />
@@ -587,6 +604,29 @@ async function delTask(cid,idx){const cl=findCl(cid);if(!cl)return;cl.tasks.spli
 function startIns(cid,idx){insertingAt={cid,idx};editingTask=null;openCards={[cid]:true};renderSummaryAndContent();}
 function cancelIns(){insertingAt=null;renderSummaryAndContent();}
 async function saveIns(cid,idx){const el=document.getElementById(`ins-inp-${cid}-${idx}`);if(!el)return;const v=el.value.trim();if(!v){el.focus();return;}const cl=findCl(cid);if(!cl)return;cl.tasks.splice(idx,0,{text:v,done:false});insertingAt=null;openCards={[cid]:true};renderSummaryAndContent();await apiPatch(cid,{tasks:cl.tasks});setSync('ok','저장됨');}
+function startEditName(cid){
+  const txt=document.getElementById('cname-txt-'+cid);
+  const inp=document.getElementById('cname-inp-'+cid);
+  const cl=findCl(cid);if(!txt||!inp||!cl)return;
+  inp.value=cl.client_name;
+  txt.style.display='none';inp.style.display='';
+  setTimeout(()=>{inp.focus();inp.select();},30);
+}
+function cancelEditName(cid){
+  const txt=document.getElementById('cname-txt-'+cid);
+  const inp=document.getElementById('cname-inp-'+cid);
+  if(txt)txt.style.display='';if(inp)inp.style.display='none';
+}
+async function finishEditName(cid,val){
+  const v=val.trim();
+  cancelEditName(cid);
+  if(!v)return;
+  const cl=findCl(cid);if(!cl||cl.client_name===v)return;
+  cl.client_name=v;
+  const txt=document.getElementById('cname-txt-'+cid);
+  if(txt)txt.textContent=v;
+  await apiPatch(cid,{client_name:v});setSync('ok','저장됨');
+}
 async function saveClientName(cid,val){
   const v=val.trim();if(!v)return;
   const cl=findCl(cid);if(!cl||cl.client_name===v)return;
